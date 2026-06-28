@@ -7,7 +7,7 @@ enum class SetupStep(val labelUk: String, val weight: Int) {
     INSTALL_ROOTFS("Завантаження Linux rootfs", 15),
     CONFIGURE_ROOTFS("Налаштування Termux-середовища", 10),
     INSTALL_QEMU("Встановлення QEMU", 25),
-    DOWNLOAD_WINDOWS_IMAGE("Завантаження образу Windows", 30),
+    DOWNLOAD_WINDOWS_IMAGE("Підготовка образу Windows", 30),
     VERIFY_ENVIRONMENT("Перевірка середовища", 5),
     COMPLETE("Готово", 0),
     ERROR("Помилка", 0),

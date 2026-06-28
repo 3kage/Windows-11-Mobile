@@ -1,5 +1,6 @@
 package com.w11mobile.ui
 
+import com.w11mobile.core.environment.ImageSource
 import com.w11mobile.core.environment.SetupStep
 
 data class SetupUiState(
@@ -11,6 +12,9 @@ data class SetupUiState(
     val environmentReady: Boolean = false,
     val canLaunchWindows: Boolean = false,
     val terminalLog: String = "",
+    val imageSource: ImageSource = ImageSource.URL,
     val windowsImageUrl: String = "",
+    val localImageUri: String? = null,
+    val localImageName: String? = null,
     val errorMessage: String? = null,
 )

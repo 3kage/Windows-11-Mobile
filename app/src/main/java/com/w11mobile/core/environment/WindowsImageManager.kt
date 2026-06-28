@@ -8,7 +8,7 @@ class WindowsImageManager(
     private val downloadManager: DownloadManager,
 ) {
     data class Meta(
-        val url: String,
+        val source: String,
         val sizeBytes: Long,
         val sha256: String?,
     )
@@ -16,7 +16,13 @@ class WindowsImageManager(
     fun isDownloadedForUrl(url: String): Boolean {
         if (!paths.windowsImage.exists()) return false
         val meta = readMeta() ?: return false
-        return meta.url == url && paths.windowsImage.length() == meta.sizeBytes
+        return meta.source == url && paths.windowsImage.length() == meta.sizeBytes
+    }
+
+    fun isDownloadedForLocal(uri: String): Boolean {
+        if (!paths.windowsImage.exists()) return false
+        val meta = readMeta() ?: return false
+        return meta.source == "local:$uri" && paths.windowsImage.length() == meta.sizeBytes
     }
 
     suspend fun download(
@@ -43,7 +49,7 @@ class WindowsImageManager(
 
         writeMeta(
             Meta(
-                url = url,
+                source = url,
                 sizeBytes = paths.windowsImage.length(),
                 sha256 = sha256(paths.windowsImage),
             ),
@@ -64,15 +70,15 @@ class WindowsImageManager(
             val parts = line.split('=', limit = 2)
             if (parts.size == 2) parts[0] to parts[1] else null
         }.toMap()
-        val url = map["url"] ?: return null
+        val source = map["source"] ?: map["url"] ?: return null
         val size = map["size"]?.toLongOrNull() ?: return null
-        return Meta(url = url, sizeBytes = size, sha256 = map["sha256"])
+        return Meta(source = source, sizeBytes = size, sha256 = map["sha256"])
     }
 
     private fun writeMeta(meta: Meta) {
         paths.windowsImageMeta.writeText(
             buildString {
-                appendLine("url=${meta.url}")
+                appendLine("source=${meta.source}")
                 appendLine("size=${meta.sizeBytes}")
                 appendLine("sha256=${meta.sha256.orEmpty()}")
             },

@@ -1,6 +1,7 @@
 package com.w11mobile.core.environment
 
 import android.app.Application
+import android.net.Uri
 import com.w11mobile.core.ShellExecutor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -28,9 +29,18 @@ class EnvironmentSetupOrchestrator(
     private val prootExecutor = PRootExecutor(paths, prootInstaller, shellExecutor)
     private val qemuManager = QemuManager(paths, prootExecutor)
     private val windowsImageManager = WindowsImageManager(paths, downloadManager)
+    private val localImageImporter = LocalImageImporter(application, paths)
 
-    suspend fun runFullSetup(windowsImageUrl: String) = withContext(Dispatchers.IO) {
+    suspend fun runFullSetup(
+        imageSource: ImageSource,
+        windowsImageUrl: String,
+        localImageUri: String?,
+        localImageName: String?,
+    ) = withContext(Dispatchers.IO) {
+        preferences.imageSource = imageSource
         preferences.windowsImageUrl = windowsImageUrl
+        preferences.localImageUri = localImageUri
+        preferences.localImageName = localImageName
 
         try {
             runStep(SetupStep.VERIFY_DEVICE) { verifyDevice() }
@@ -38,7 +48,9 @@ class EnvironmentSetupOrchestrator(
             runStep(SetupStep.INSTALL_ROOTFS) { installRootfs() }
             runStep(SetupStep.CONFIGURE_ROOTFS) { configureRootfs() }
             runStep(SetupStep.INSTALL_QEMU) { installQemu() }
-            runStep(SetupStep.DOWNLOAD_WINDOWS_IMAGE) { downloadWindowsImage(windowsImageUrl) }
+            runStep(SetupStep.DOWNLOAD_WINDOWS_IMAGE) {
+                prepareWindowsImage(imageSource, windowsImageUrl, localImageUri, localImageName)
+            }
             runStep(SetupStep.VERIFY_ENVIRONMENT) { verifyEnvironment() }
 
             onStepChanged(SetupStep.COMPLETE)
@@ -117,10 +129,66 @@ class EnvironmentSetupOrchestrator(
         require(result.success) { "Не вдалося встановити QEMU: ${result.stderr}" }
     }
 
+    suspend fun importLocalImageOnly(
+        localImageUri: String,
+        localImageName: String?,
+    ) = withContext(Dispatchers.IO) {
+        preferences.imageSource = ImageSource.LOCAL
+        preferences.localImageUri = localImageUri
+        preferences.localImageName = localImageName
+        onLog("\n=== Імпорт локального образу ===\n")
+        importLocalWindowsImage(localImageUri, localImageName)
+        updateLaunchReadiness()
+    }
+
+    private fun updateLaunchReadiness() {
+        if (canLaunchWindows()) {
+            onLog("\n>>> Образ Windows готовий до запуску.\n")
+        }
+    }
+
+    private suspend fun prepareWindowsImage(
+        imageSource: ImageSource,
+        url: String,
+        localImageUri: String?,
+        localImageName: String?,
+    ) {
+        when (imageSource) {
+            ImageSource.URL -> downloadWindowsImage(url)
+            ImageSource.LOCAL -> importLocalWindowsImage(localImageUri, localImageName)
+        }
+    }
+
+    private suspend fun importLocalWindowsImage(
+        uriString: String?,
+        displayName: String?,
+    ) {
+        require(!uriString.isNullOrBlank()) {
+            "Оберіть локальний файл образу (.qcow2 або .iso) на пристрої."
+        }
+
+        if (windowsImageManager.isDownloadedForLocal(uriString)) {
+            onLog("Локальний образ вже імпортовано: ${paths.windowsImage.absolutePath}\n")
+            return
+        }
+
+        onLog("Імпорт локального файлу: ${displayName ?: uriString}\n")
+        val uri = Uri.parse(uriString)
+        val imported = localImageImporter.importFromUri(uri, displayName) { copied, total ->
+            reportDownloadProgress(SetupStep.DOWNLOAD_WINDOWS_IMAGE, copied, total)
+        }
+
+        finalizeWindowsImage(
+            sourceLabel = "local:$uriString",
+            importedFile = imported,
+            isIso = imported.name.endsWith(".iso", ignoreCase = true),
+        )
+    }
+
     private suspend fun downloadWindowsImage(url: String) {
         if (url.isBlank()) {
             onLog("URL образу Windows не вказано — пропускаємо завантаження.\n")
-            onLog("Введіть URL (.qcow2/.iso) і повторіть ініціалізацію.\n")
+            onLog("Оберіть локальний файл або вкажіть URL і повторіть ініціалізацію.\n")
             return
         }
 
@@ -137,11 +205,24 @@ class EnvironmentSetupOrchestrator(
             reportDownloadProgress(SetupStep.DOWNLOAD_WINDOWS_IMAGE, downloadedBytes, totalBytes)
         }
 
-        if (url.endsWith(".iso", ignoreCase = true)) {
+        finalizeWindowsImage(
+            sourceLabel = url,
+            importedFile = downloaded,
+            isIso = url.endsWith(".iso", ignoreCase = true),
+        )
+        preferences.windowsImageUrl = url
+    }
+
+    private suspend fun finalizeWindowsImage(
+        sourceLabel: String,
+        importedFile: File,
+        isIso: Boolean,
+    ) {
+        if (isIso) {
             onLog("Конвертація ISO → QCOW2 через qemu-img...\n")
             val isoFile = File(paths.imagesDir, "windows.iso")
             if (isoFile.exists()) isoFile.delete()
-            require(downloaded.renameTo(isoFile)) { "Не вдалося перемістити ISO" }
+            require(importedFile.renameTo(isoFile)) { "Не вдалося перемістити ISO" }
             val result = prootExecutor.execInRootfs(
                 """
                 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -153,16 +234,15 @@ class EnvironmentSetupOrchestrator(
             require(result.success) { "Не вдалося конвертувати ISO в QCOW2" }
         } else {
             if (paths.windowsImage.exists()) paths.windowsImage.delete()
-            require(downloaded.renameTo(paths.windowsImage)) { "Не вдалося зберегти QCOW2 образ" }
+            require(importedFile.renameTo(paths.windowsImage)) { "Не вдалося зберегти QCOW2 образ" }
         }
 
         paths.windowsImageMeta.writeText(
             buildString {
-                appendLine("url=$url")
+                appendLine("source=$sourceLabel")
                 appendLine("size=${paths.windowsImage.length()}")
             },
         )
-        preferences.windowsImageUrl = url
         onLog("Образ Windows: ${paths.windowsImage.absolutePath} (${paths.windowsImage.length()} bytes)\n")
     }
 

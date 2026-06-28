@@ -91,7 +91,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 refreshEnvironmentState(SetupStep.COMPLETE, SetupStep.COMPLETE.labelUk, 100)
             } catch (error: Exception) {
-                refreshEnvironmentState(SetupStep.ERROR, SetupStep.ERROR.labelUk, progress, error.message)
+                refreshEnvironmentState(
+                    SetupStep.ERROR,
+                    SetupStep.ERROR.labelUk,
+                    _uiState.value?.progress ?: 0,
+                    error.message,
+                )
             }
         }
     }

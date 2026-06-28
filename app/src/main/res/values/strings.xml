@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Windows 11 Mobile</string>
+    <string name="initialize_windows">Ініціалізувати Windows 11</string>
+    <string name="initializing_windows">Ініціалізація…</string>
+    <string name="terminal_log">Лог терміналу</string>
+    <string name="terminal_log_hint">Логи з\'являться тут після ініціалізації…</string>
+    <string name="clear_log">Очистити лог</string>
+</resources>

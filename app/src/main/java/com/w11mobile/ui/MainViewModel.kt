@@ -12,14 +12,18 @@ import com.w11mobile.core.environment.SetupPreferences
 import com.w11mobile.core.environment.SetupStep
 import com.w11mobile.core.environment.WindowsImageArch
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicReference
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val preferences = SetupPreferences(application)
+    private val uiStateStore = AtomicReference<SetupUiState>()
     private val orchestrator = EnvironmentSetupOrchestrator(
         application = application,
         preferences = preferences,
-        onStepChanged = { step -> updateState { copy(step = step, stepLabel = step.labelUk, errorMessage = null) } },
+        onStepChanged = { step ->
+            updateState { copy(step = step, stepLabel = step.labelUk, errorMessage = null) }
+        },
         onProgressChanged = { progress, indeterminate ->
             updateState { copy(progress = progress, isIndeterminate = indeterminate) }
         },
@@ -35,7 +39,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             windowsImageArch = preferences.windowsImageArch,
             environmentReady = preferences.setupComplete || orchestrator.isEnvironmentReady(),
             canLaunchWindows = orchestrator.canLaunchWindows(),
-        ),
+        ).also { uiStateStore.set(it) },
     )
     val uiState: LiveData<SetupUiState> = _uiState
 
@@ -195,6 +199,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun updateState(transform: SetupUiState.() -> SetupUiState) {
-        _uiState.value = (_uiState.value ?: SetupUiState()).transform()
+        val newState = uiStateStore.updateAndGet { current ->
+            (current ?: _uiState.value ?: SetupUiState()).transform()
+        }
+        _uiState.postValue(newState)
     }
 }

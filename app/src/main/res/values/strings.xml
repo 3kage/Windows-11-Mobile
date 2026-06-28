@@ -3,7 +3,11 @@
     <string name="app_name">Windows 11 Mobile</string>
     <string name="initialize_windows">Ініціалізувати Windows 11</string>
     <string name="initializing_windows">Ініціалізація…</string>
+    <string name="launch_windows">Запустити Windows 11</string>
     <string name="terminal_log">Лог терміналу</string>
-    <string name="terminal_log_hint">Логи з\'являться тут після ініціалізації…</string>
+    <string name="terminal_log_hint">Логи з\'являться тут під час ініціалізації…</string>
     <string name="clear_log">Очистити лог</string>
+    <string name="windows_image_url_hint">URL образу Windows (.qcow2 або .iso)</string>
+    <string name="status_idle">Очікування</string>
+    <string name="progress_percent">%1$d%%</string>
 </resources>

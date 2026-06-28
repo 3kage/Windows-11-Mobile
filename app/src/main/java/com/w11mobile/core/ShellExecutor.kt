@@ -38,6 +38,21 @@ class ShellExecutor(
         executeBlocking(command, *args)
     }
 
+    suspend fun executeWithArgs(
+        args: List<String>,
+        environment: Map<String, String> = emptyMap(),
+    ): Result = withContext(Dispatchers.IO) {
+        executeBlockingWithArgs(args, environment)
+    }
+
+    suspend fun executeStreamingWithArgs(
+        args: List<String>,
+        environment: Map<String, String> = emptyMap(),
+        onLine: (String) -> Unit,
+    ): Result = withContext(Dispatchers.IO) {
+        executeStreamingBlockingWithArgs(args, environment, onLine)
+    }
+
     suspend fun executeScript(
         script: String,
         shell: String = "/system/bin/sh",
@@ -60,10 +75,60 @@ class ShellExecutor(
         return runProcess(processBuilder, displayCommand)
     }
 
-    private fun configureProcess(processBuilder: ProcessBuilder) {
+    fun executeBlockingWithArgs(
+        args: List<String>,
+        extraEnvironment: Map<String, String> = emptyMap(),
+    ): Result {
+        val processBuilder = ProcessBuilder(args)
+        configureProcess(processBuilder, extraEnvironment)
+        return runProcess(processBuilder, args.joinToString(" "))
+    }
+
+    fun executeStreamingBlockingWithArgs(
+        args: List<String>,
+        extraEnvironment: Map<String, String> = emptyMap(),
+        onLine: (String) -> Unit,
+    ): Result {
+        val processBuilder = ProcessBuilder(args)
+        configureProcess(processBuilder, extraEnvironment)
+        val process = processBuilder.start()
+        val stdout = StringBuilder()
+        val stderr = StringBuilder()
+
+        val stdoutThread = Thread {
+            process.inputStream.bufferedReader().forEachLine { line ->
+                synchronized(stdout) { stdout.appendLine(line) }
+                onLine(line)
+            }
+        }
+        val stderrThread = Thread {
+            process.errorStream.bufferedReader().forEachLine { line ->
+                synchronized(stderr) { stderr.appendLine(line) }
+                onLine(line)
+            }
+        }
+        stdoutThread.start()
+        stderrThread.start()
+        stdoutThread.join()
+        stderrThread.join()
+
+        val exitCode = process.waitFor()
+        return Result(
+            exitCode = exitCode,
+            stdout = stdout.toString(),
+            stderr = stderr.toString(),
+            command = args.joinToString(" "),
+        )
+    }
+
+    private fun configureProcess(
+        processBuilder: ProcessBuilder,
+        extraEnvironment: Map<String, String> = emptyMap(),
+    ) {
         workingDirectory?.let { processBuilder.directory(it) }
-        if (environment.isNotEmpty()) {
-            processBuilder.environment().putAll(environment)
+        val mergedEnvironment = environment + extraEnvironment
+        if (mergedEnvironment.isNotEmpty()) {
+            processBuilder.environment().putAll(mergedEnvironment)
         }
         processBuilder.redirectErrorStream(false)
     }

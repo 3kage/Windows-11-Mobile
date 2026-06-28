@@ -5,67 +5,118 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
-import com.w11mobile.core.ShellExecutor
+import com.w11mobile.core.environment.EnvironmentSetupOrchestrator
+import com.w11mobile.core.environment.SetupPreferences
+import com.w11mobile.core.environment.SetupStep
 import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val shellExecutor = ShellExecutor(
-        workingDirectory = application.filesDir,
-        environment = mapOf(
-            "PATH" to "/system/bin:/system/xbin:/vendor/bin",
-            "HOME" to application.filesDir.absolutePath,
-            "TERM" to "xterm-256color",
-        ),
+    private val preferences = SetupPreferences(application)
+    private val orchestrator = EnvironmentSetupOrchestrator(
+        application = application,
+        preferences = preferences,
+        onStepChanged = { step -> updateState { copy(step = step, stepLabel = step.labelUk, errorMessage = null) } },
+        onProgressChanged = { progress, indeterminate ->
+            updateState { copy(progress = progress, isIndeterminate = indeterminate) }
+        },
+        onLog = { text -> appendLog(text) },
     )
 
-    private val _terminalLog = MutableLiveData("")
-    val terminalLog: LiveData<String> = _terminalLog
+    private val _uiState = MutableLiveData(
+        SetupUiState(
+            windowsImageUrl = preferences.windowsImageUrl,
+            environmentReady = preferences.setupComplete || orchestrator.isEnvironmentReady(),
+            canLaunchWindows = orchestrator.canLaunchWindows(),
+        ),
+    )
+    val uiState: LiveData<SetupUiState> = _uiState
 
-    private val _isInitializing = MutableLiveData(false)
-    val isInitializing: LiveData<Boolean> = _isInitializing
+    fun setWindowsImageUrl(url: String) {
+        updateState { copy(windowsImageUrl = url) }
+    }
 
     fun initializeWindows11() {
-        if (_isInitializing.value == true) return
+        val state = _uiState.value ?: return
+        if (state.isRunning) return
 
         viewModelScope.launch {
-            _isInitializing.value = true
-            appendLog(">>> Ініціалізація Windows 11 середовища...\n")
+            updateState {
+                copy(
+                    isRunning = true,
+                    environmentReady = false,
+                    canLaunchWindows = false,
+                    errorMessage = null,
+                    step = SetupStep.VERIFY_DEVICE,
+                    stepLabel = SetupStep.VERIFY_DEVICE.labelUk,
+                    progress = 0,
+                    isIndeterminate = false,
+                )
+            }
+            appendLog(">>> Повна ініціалізація Windows 11 середовища...\n")
 
-            runCommand("uname", "-a")
-            runCommand("id")
-            runScript(
-                """
-                echo "Перевірка user-space середовища..."
-                echo "PWD: $(pwd)"
-                echo "Готово до розгортання PRoot/Termux образу."
-                """.trimIndent()
-            )
+            try {
+                orchestrator.runFullSetup(state.windowsImageUrl.trim())
+                updateState {
+                    copy(
+                        isRunning = false,
+                        environmentReady = orchestrator.isEnvironmentReady(),
+                        canLaunchWindows = orchestrator.canLaunchWindows(),
+                        step = SetupStep.COMPLETE,
+                        stepLabel = SetupStep.COMPLETE.labelUk,
+                        progress = 100,
+                        isIndeterminate = false,
+                    )
+                }
+            } catch (error: Exception) {
+                updateState {
+                    copy(
+                        isRunning = false,
+                        environmentReady = orchestrator.isEnvironmentReady(),
+                        canLaunchWindows = orchestrator.canLaunchWindows(),
+                        step = SetupStep.ERROR,
+                        stepLabel = SetupStep.ERROR.labelUk,
+                        errorMessage = error.message,
+                        isIndeterminate = false,
+                    )
+                }
+            }
+        }
+    }
 
-            appendLog("\n>>> Ініціалізація завершена.\n")
-            _isInitializing.value = false
+    fun launchWindows11() {
+        val state = _uiState.value ?: return
+        if (state.isRunning) return
+
+        viewModelScope.launch {
+            updateState { copy(isRunning = true, errorMessage = null) }
+            appendLog("\n>>> Запуск Windows 11...\n")
+            try {
+                orchestrator.launchWindows()
+            } catch (error: Exception) {
+                appendLog("\n[ПОМИЛКА] ${error.message}\n")
+                updateState { copy(errorMessage = error.message) }
+            } finally {
+                updateState {
+                    copy(
+                        isRunning = false,
+                        environmentReady = orchestrator.isEnvironmentReady(),
+                        canLaunchWindows = orchestrator.canLaunchWindows(),
+                    )
+                }
+            }
         }
     }
 
     fun clearLog() {
-        _terminalLog.value = ""
-    }
-
-    private suspend fun runCommand(command: String, vararg args: String) {
-        appendLog("$ ${listOf(command, *args).joinToString(" ")}\n")
-        val result = shellExecutor.execute(command, *args)
-        appendLog(result.combinedOutput())
-        appendLog("\n[exit ${result.exitCode}]\n\n")
-    }
-
-    private suspend fun runScript(script: String) {
-        appendLog("$ sh -c \"...\"\n")
-        val result = shellExecutor.executeScript(script)
-        appendLog(result.combinedOutput())
-        appendLog("\n[exit ${result.exitCode}]\n\n")
+        updateState { copy(terminalLog = "") }
     }
 
     private fun appendLog(text: String) {
-        _terminalLog.value = (_terminalLog.value.orEmpty()) + text
+        updateState { copy(terminalLog = terminalLog + text) }
+    }
+
+    private fun updateState(transform: SetupUiState.() -> SetupUiState) {
+        _uiState.value = (_uiState.value ?: SetupUiState()).transform()
     }
 }

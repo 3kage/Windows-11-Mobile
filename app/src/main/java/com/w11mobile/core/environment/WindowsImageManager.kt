@@ -59,6 +59,7 @@ class WindowsImageManager(
             Meta(
                 source = url,
                 sizeBytes = paths.windowsImage.length(),
+                bootMode = "qcow2",
                 sha256 = sha256(paths.windowsImage),
             ),
         )

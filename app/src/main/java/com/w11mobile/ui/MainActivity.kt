@@ -11,6 +11,7 @@ import androidx.core.widget.doAfterTextChanged
 import com.w11mobile.R
 import com.w11mobile.core.environment.ImageSource
 import com.w11mobile.core.environment.SetupStep
+import com.w11mobile.core.environment.WindowsImageArch
 import com.w11mobile.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
@@ -84,6 +85,12 @@ class MainActivity : AppCompatActivity() {
                 binding.imageSourceToggle.check(sourceToToggleId(state.imageSource))
             }
 
+            if (binding.imageArchToggle.checkedButtonId == android.view.View.NO_ID ||
+                binding.imageArchToggle.checkedButtonId != archToToggleId(state.windowsImageArch)
+            ) {
+                binding.imageArchToggle.check(archToToggleId(state.windowsImageArch))
+            }
+
             if (binding.windowsImageUrlInput.text?.toString() != state.windowsImageUrl) {
                 binding.windowsImageUrlInput.setText(state.windowsImageUrl)
             }
@@ -98,6 +105,17 @@ class MainActivity : AppCompatActivity() {
             if (!isChecked) return@addOnButtonCheckedListener
             viewModel.setImageSource(
                 if (checkedId == R.id.btnSourceLocal) ImageSource.LOCAL else ImageSource.URL,
+            )
+        }
+
+        binding.imageArchToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            viewModel.setWindowsImageArch(
+                when (checkedId) {
+                    R.id.btnArchArm64 -> WindowsImageArch.ARM64
+                    R.id.btnArchX86 -> WindowsImageArch.X86_64
+                    else -> WindowsImageArch.AUTO
+                },
             )
         }
 
@@ -128,6 +146,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun sourceToToggleId(source: ImageSource): Int =
         if (source == ImageSource.LOCAL) R.id.btnSourceLocal else R.id.btnSourceUrl
+
+    private fun archToToggleId(arch: WindowsImageArch): Int = when (arch) {
+        WindowsImageArch.ARM64 -> R.id.btnArchArm64
+        WindowsImageArch.X86_64 -> R.id.btnArchX86
+        WindowsImageArch.AUTO -> R.id.btnArchAuto
+    }
 
     private fun queryDisplayName(uri: Uri): String? {
         contentResolver.query(uri, null, null, null, null)?.use { cursor ->

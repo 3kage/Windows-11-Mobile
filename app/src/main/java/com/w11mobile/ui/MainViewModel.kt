@@ -10,6 +10,7 @@ import com.w11mobile.core.environment.EnvironmentSetupOrchestrator
 import com.w11mobile.core.environment.ImageSource
 import com.w11mobile.core.environment.SetupPreferences
 import com.w11mobile.core.environment.SetupStep
+import com.w11mobile.core.environment.WindowsImageArch
 import kotlinx.coroutines.launch
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -31,6 +32,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             windowsImageUrl = preferences.windowsImageUrl,
             localImageUri = preferences.localImageUri,
             localImageName = preferences.localImageName,
+            windowsImageArch = preferences.windowsImageArch,
             environmentReady = preferences.setupComplete || orchestrator.isEnvironmentReady(),
             canLaunchWindows = orchestrator.canLaunchWindows(),
         ),
@@ -47,6 +49,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         updateState { copy(windowsImageUrl = url) }
     }
 
+    fun setWindowsImageArch(arch: WindowsImageArch) {
+        preferences.windowsImageArch = arch
+        updateState { copy(windowsImageArch = arch) }
+    }
+
     fun onLocalImageSelected(uri: Uri, displayName: String?) {
         val uriString = uri.toString()
         preferences.localImageUri = uriString
@@ -61,6 +68,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         appendLog("\n>>> Обрано локальний файл: ${displayName ?: uriString}\n")
+        if (displayName?.contains("arm", ignoreCase = true) == true) {
+            appendLog(">>> Виявлено ARM64 ISO — рекомендуємо режим ARM64.\n")
+        }
     }
 
     fun initializeWindows11() {
@@ -88,6 +98,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     windowsImageUrl = state.windowsImageUrl.trim(),
                     localImageUri = state.localImageUri,
                     localImageName = state.localImageName,
+                    imageArch = state.windowsImageArch,
                 )
                 refreshEnvironmentState(SetupStep.COMPLETE, SetupStep.COMPLETE.labelUk, 100)
             } catch (error: Exception) {
@@ -113,7 +124,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             updateState { copy(isRunning = true, errorMessage = null, isIndeterminate = true) }
             try {
                 if (orchestrator.isEnvironmentReady()) {
-                    orchestrator.importLocalImageOnly(uri, state.localImageName)
+                    orchestrator.importLocalImageOnly(uri, state.localImageName, state.windowsImageArch)
                 } else {
                     appendLog(">>> Середовище ще не готове — запускаємо повну ініціалізацію...\n")
                     orchestrator.runFullSetup(
@@ -121,6 +132,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         windowsImageUrl = "",
                         localImageUri = uri,
                         localImageName = state.localImageName,
+                        imageArch = state.windowsImageArch,
                     )
                 }
                 refreshEnvironmentState(SetupStep.COMPLETE, "Образ імпортовано", 100)

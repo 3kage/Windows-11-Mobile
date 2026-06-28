@@ -2,6 +2,7 @@ package com.w11mobile.ui
 
 import com.w11mobile.core.environment.ImageSource
 import com.w11mobile.core.environment.SetupStep
+import com.w11mobile.core.environment.WindowsImageArch
 
 data class SetupUiState(
     val step: SetupStep = SetupStep.IDLE,
@@ -16,5 +17,6 @@ data class SetupUiState(
     val windowsImageUrl: String = "",
     val localImageUri: String? = null,
     val localImageName: String? = null,
+    val windowsImageArch: WindowsImageArch = WindowsImageArch.AUTO,
     val errorMessage: String? = null,
 )

@@ -61,6 +61,43 @@
             android:text="@string/image_source_local" />
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/imageArchToggle"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        app:checkedButton="@+id/btnArchAuto"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/imageSourceToggle"
+        app:selectionRequired="true"
+        app:singleSelection="true">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnArchAuto"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/arch_auto" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnArchArm64"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/arch_arm64" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnArchX86"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/arch_x86_64" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/windowsImageUrlLayout"
         android:layout_width="0dp"
@@ -69,7 +106,7 @@
         android:hint="@string/windows_image_url_hint"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/imageSourceToggle">
+        app:layout_constraintTop_toBottomOf="@id/imageArchToggle">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/windowsImageUrlInput"
@@ -88,7 +125,7 @@
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/imageSourceToggle"
+        app:layout_constraintTop_toBottomOf="@id/imageArchToggle"
         tools:visibility="visible">
 
         <com.google.android.material.button.MaterialButton

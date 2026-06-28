@@ -11,6 +11,12 @@ class AppPaths(filesDir: File) {
     val proot: File = File(binDir, "proot")
     val rootfsDir: File = File(filesDir, "rootfs").apply { mkdirs() }
     val imagesDir: File = File(filesDir, "images").apply { mkdirs() }
+    val windowsIso: File = File(imagesDir, "windows.iso")
+    val windowsDisk: File = File(imagesDir, "windows-disk.qcow2")
     val windowsImage: File = File(imagesDir, "windows.qcow2")
     val windowsImageMeta: File = File(imagesDir, "windows.meta")
+
+    fun readImageConfig(): WindowsImageConfig? = WindowsImageConfigStore.read(windowsImageMeta)
+
+    fun hasBootableImage(): Boolean = windowsIso.exists() || windowsImage.exists() || windowsDisk.exists()
 }

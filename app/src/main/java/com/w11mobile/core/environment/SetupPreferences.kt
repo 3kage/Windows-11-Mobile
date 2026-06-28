@@ -24,6 +24,13 @@ class SetupPreferences(context: Context) {
         get() = prefs.getString(KEY_LOCAL_IMAGE_NAME, null)
         set(value) = prefs.edit().putString(KEY_LOCAL_IMAGE_NAME, value).apply()
 
+    var windowsImageArch: WindowsImageArch
+        get() = WindowsImageArch.valueOf(
+            prefs.getString(KEY_WINDOWS_IMAGE_ARCH, WindowsImageArch.AUTO.name)
+                ?: WindowsImageArch.AUTO.name,
+        )
+        set(value) = prefs.edit().putString(KEY_WINDOWS_IMAGE_ARCH, value.name).apply()
+
     var setupComplete: Boolean
         get() = prefs.getBoolean(KEY_SETUP_COMPLETE, false)
         set(value) = prefs.edit().putBoolean(KEY_SETUP_COMPLETE, value).apply()
@@ -34,6 +41,7 @@ class SetupPreferences(context: Context) {
         private const val KEY_IMAGE_SOURCE = "image_source"
         private const val KEY_LOCAL_IMAGE_URI = "local_image_uri"
         private const val KEY_LOCAL_IMAGE_NAME = "local_image_name"
+        private const val KEY_WINDOWS_IMAGE_ARCH = "windows_image_arch"
         private const val KEY_SETUP_COMPLETE = "setup_complete"
     }
 }

@@ -7,6 +7,9 @@
     <string name="terminal_log">Лог терміналу</string>
     <string name="terminal_log_hint">Логи з\'являться тут під час ініціалізації…</string>
     <string name="clear_log">Очистити лог</string>
+    <string name="arch_auto">Авто</string>
+    <string name="arch_arm64">ARM64</string>
+    <string name="arch_x86_64">x86_64</string>
     <string name="windows_image_url_hint">URL образу Windows (.qcow2 або .iso)</string>
     <string name="image_source_url">Завантажити з URL</string>
     <string name="image_source_local">Локальний файл</string>

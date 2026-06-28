@@ -36,11 +36,13 @@ class EnvironmentSetupOrchestrator(
         windowsImageUrl: String,
         localImageUri: String?,
         localImageName: String?,
+        imageArch: WindowsImageArch,
     ) = withContext(Dispatchers.IO) {
         preferences.imageSource = imageSource
         preferences.windowsImageUrl = windowsImageUrl
         preferences.localImageUri = localImageUri
         preferences.localImageName = localImageName
+        preferences.windowsImageArch = imageArch
 
         try {
             runStep(SetupStep.VERIFY_DEVICE) { verifyDevice() }
@@ -49,7 +51,13 @@ class EnvironmentSetupOrchestrator(
             runStep(SetupStep.CONFIGURE_ROOTFS) { configureRootfs() }
             runStep(SetupStep.INSTALL_QEMU) { installQemu() }
             runStep(SetupStep.DOWNLOAD_WINDOWS_IMAGE) {
-                prepareWindowsImage(imageSource, windowsImageUrl, localImageUri, localImageName)
+                prepareWindowsImage(
+                    imageSource = imageSource,
+                    url = windowsImageUrl,
+                    localImageUri = localImageUri,
+                    localImageName = localImageName,
+                    imageArch = imageArch,
+                )
             }
             runStep(SetupStep.VERIFY_ENVIRONMENT) { verifyEnvironment() }
 
@@ -68,16 +76,43 @@ class EnvironmentSetupOrchestrator(
         require(canLaunchWindows()) {
             "Спочатку завершіть ініціалізацію та завантажте образ Windows."
         }
-        qemuManager.launchWindows(onLine = { line -> onLog("$line\n") })
+        qemuManager.launchWindows(
+            config = paths.readImageConfig() ?: defaultImageConfig(),
+            onLine = { line -> onLog("$line\n") },
+        )
+    }
+
+    private fun defaultImageConfig(): WindowsImageConfig {
+        return when {
+            paths.windowsIso.exists() -> WindowsImageConfig(
+                arch = preferences.windowsImageArch.let {
+                    if (it == WindowsImageArch.AUTO) WindowsImageArch.ARM64 else it
+                },
+                bootMode = WindowsBootMode.ISO,
+                source = "local",
+                isoFileName = paths.windowsIso.name,
+                diskFileName = paths.windowsDisk.name,
+            )
+
+            else -> WindowsImageConfig(
+                arch = preferences.windowsImageArch.let {
+                    if (it == WindowsImageArch.AUTO) WindowsImageArch.X86_64 else it
+                },
+                bootMode = WindowsBootMode.QCOW2,
+                source = "local",
+                diskFileName = paths.windowsImage.name,
+            )
+        }
     }
 
     fun isEnvironmentReady(): Boolean =
         paths.proot.canExecute() &&
             File(paths.rootfsDir, "bin/sh").exists() &&
-            File(paths.cacheDir, "qemu_installed.marker").exists()
+            (File(paths.cacheDir, "qemu_aarch64_installed.marker").exists() ||
+                File(paths.cacheDir, "qemu_installed.marker").exists())
 
     fun canLaunchWindows(): Boolean =
-        isEnvironmentReady() && paths.windowsImage.exists()
+        isEnvironmentReady() && paths.hasBootableImage()
 
     private suspend fun runStep(step: SetupStep, block: suspend () -> Unit) {
         onStepChanged(step)
@@ -132,12 +167,14 @@ class EnvironmentSetupOrchestrator(
     suspend fun importLocalImageOnly(
         localImageUri: String,
         localImageName: String?,
+        imageArch: WindowsImageArch,
     ) = withContext(Dispatchers.IO) {
         preferences.imageSource = ImageSource.LOCAL
         preferences.localImageUri = localImageUri
         preferences.localImageName = localImageName
+        preferences.windowsImageArch = imageArch
         onLog("\n=== Імпорт локального образу ===\n")
-        importLocalWindowsImage(localImageUri, localImageName)
+        importLocalWindowsImage(localImageUri, localImageName, imageArch)
         updateLaunchReadiness()
     }
 
@@ -152,23 +189,26 @@ class EnvironmentSetupOrchestrator(
         url: String,
         localImageUri: String?,
         localImageName: String?,
+        imageArch: WindowsImageArch,
     ) {
         when (imageSource) {
-            ImageSource.URL -> downloadWindowsImage(url)
-            ImageSource.LOCAL -> importLocalWindowsImage(localImageUri, localImageName)
+            ImageSource.URL -> downloadWindowsImage(url, imageArch)
+            ImageSource.LOCAL -> importLocalWindowsImage(localImageUri, localImageName, imageArch)
         }
     }
 
     private suspend fun importLocalWindowsImage(
         uriString: String?,
         displayName: String?,
+        imageArch: WindowsImageArch,
     ) {
         require(!uriString.isNullOrBlank()) {
             "Оберіть локальний файл образу (.qcow2 або .iso) на пристрої."
         }
 
         if (windowsImageManager.isDownloadedForLocal(uriString)) {
-            onLog("Локальний образ вже імпортовано: ${paths.windowsImage.absolutePath}\n")
+            onLog("Локальний образ вже імпортовано.\n")
+            logImageSummary()
             return
         }
 
@@ -182,10 +222,12 @@ class EnvironmentSetupOrchestrator(
             sourceLabel = "local:$uriString",
             importedFile = imported,
             isIso = imported.name.endsWith(".iso", ignoreCase = true),
+            imageArch = imageArch,
+            displayName = displayName ?: imported.name,
         )
     }
 
-    private suspend fun downloadWindowsImage(url: String) {
+    private suspend fun downloadWindowsImage(url: String, imageArch: WindowsImageArch) {
         if (url.isBlank()) {
             onLog("URL образу Windows не вказано — пропускаємо завантаження.\n")
             onLog("Оберіть локальний файл або вкажіть URL і повторіть ініціалізацію.\n")
@@ -193,7 +235,8 @@ class EnvironmentSetupOrchestrator(
         }
 
         if (windowsImageManager.isDownloadedForUrl(url)) {
-            onLog("Образ Windows вже завантажено: ${paths.windowsImage.absolutePath}\n")
+            onLog("Образ Windows вже завантажено.\n")
+            logImageSummary()
             return
         }
 
@@ -209,6 +252,8 @@ class EnvironmentSetupOrchestrator(
             sourceLabel = url,
             importedFile = downloaded,
             isIso = url.endsWith(".iso", ignoreCase = true),
+            imageArch = imageArch,
+            displayName = url.substringAfterLast('/'),
         )
         preferences.windowsImageUrl = url
     }
@@ -217,9 +262,36 @@ class EnvironmentSetupOrchestrator(
         sourceLabel: String,
         importedFile: File,
         isIso: Boolean,
+        imageArch: WindowsImageArch,
+        displayName: String,
     ) {
-        if (isIso) {
-            onLog("Конвертація ISO → QCOW2 через qemu-img...\n")
+        val detectedArch = ImageArchDetector.detect(displayName, imageArch)
+        onLog("Архітектура образу: ${detectedArch.name}\n")
+
+        if (isIso && detectedArch == WindowsImageArch.ARM64) {
+            onLog("Режим ARM64 ISO — завантаження інсталятора без конвертації.\n")
+            if (paths.windowsIso.exists()) paths.windowsIso.delete()
+            require(importedFile.renameTo(paths.windowsIso)) { "Не вдалося зберегти ISO" }
+
+            val diskResult = qemuManager.createInstallDiskIfNeeded { line -> onLog(line) }
+            if (diskResult.exitCode != 0 && diskResult.command != "skip") {
+                logResult(diskResult)
+                error("Не вдалося створити диск для встановлення Windows")
+            }
+
+            WindowsImageConfigStore.write(
+                paths.windowsImageMeta,
+                WindowsImageConfig(
+                    arch = detectedArch,
+                    bootMode = WindowsBootMode.ISO,
+                    source = sourceLabel,
+                    isoFileName = paths.windowsIso.name,
+                    diskFileName = paths.windowsDisk.name,
+                ),
+                paths.windowsIso.length(),
+            )
+        } else if (isIso) {
+            onLog("Конвертація x86 ISO → QCOW2 через qemu-img...\n")
             val isoFile = File(paths.imagesDir, "windows.iso")
             if (isoFile.exists()) isoFile.delete()
             require(importedFile.renameTo(isoFile)) { "Не вдалося перемістити ISO" }
@@ -232,18 +304,41 @@ class EnvironmentSetupOrchestrator(
             )
             logResult(result)
             require(result.success) { "Не вдалося конвертувати ISO в QCOW2" }
+            WindowsImageConfigStore.write(
+                paths.windowsImageMeta,
+                WindowsImageConfig(
+                    arch = WindowsImageArch.X86_64,
+                    bootMode = WindowsBootMode.QCOW2,
+                    source = sourceLabel,
+                    diskFileName = paths.windowsImage.name,
+                ),
+                paths.windowsImage.length(),
+            )
         } else {
             if (paths.windowsImage.exists()) paths.windowsImage.delete()
             require(importedFile.renameTo(paths.windowsImage)) { "Не вдалося зберегти QCOW2 образ" }
+            WindowsImageConfigStore.write(
+                paths.windowsImageMeta,
+                WindowsImageConfig(
+                    arch = detectedArch,
+                    bootMode = WindowsBootMode.QCOW2,
+                    source = sourceLabel,
+                    diskFileName = paths.windowsImage.name,
+                ),
+                paths.windowsImage.length(),
+            )
         }
 
-        paths.windowsImageMeta.writeText(
-            buildString {
-                appendLine("source=$sourceLabel")
-                appendLine("size=${paths.windowsImage.length()}")
-            },
-        )
-        onLog("Образ Windows: ${paths.windowsImage.absolutePath} (${paths.windowsImage.length()} bytes)\n")
+        logImageSummary()
+    }
+
+    private fun logImageSummary() {
+        onLog("ISO: ${if (paths.windowsIso.exists()) paths.windowsIso.absolutePath else "—"}\n")
+        onLog("Диск: ${if (paths.windowsDisk.exists()) paths.windowsDisk.absolutePath else "—"}\n")
+        onLog("QCOW2: ${if (paths.windowsImage.exists()) paths.windowsImage.absolutePath else "—"}\n")
+        paths.readImageConfig()?.let { config ->
+            onLog("Конфіг: ${config.arch.name}, boot=${config.bootMode.name.lowercase()}\n")
+        }
     }
 
     private suspend fun verifyEnvironment() {
@@ -251,8 +346,9 @@ class EnvironmentSetupOrchestrator(
             """
             export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
             echo "=== Перевірка ==="
-            proot-info() { echo "PRoot OK"; }
+            which qemu-system-aarch64
             which qemu-system-x86_64
+            ls -lh /usr/share/edk2-aarch64/QEMU_EFI.fd
             ls -lh /images || true
             """.trimIndent(),
         )

@@ -10,19 +10,27 @@ class WindowsImageManager(
     data class Meta(
         val source: String,
         val sizeBytes: Long,
+        val bootMode: String?,
         val sha256: String?,
     )
 
     fun isDownloadedForUrl(url: String): Boolean {
-        if (!paths.windowsImage.exists()) return false
         val meta = readMeta() ?: return false
-        return meta.source == url && paths.windowsImage.length() == meta.sizeBytes
+        if (meta.source != url) return false
+        return hasStoredImage(meta)
     }
 
     fun isDownloadedForLocal(uri: String): Boolean {
-        if (!paths.windowsImage.exists()) return false
         val meta = readMeta() ?: return false
-        return meta.source == "local:$uri" && paths.windowsImage.length() == meta.sizeBytes
+        if (meta.source != "local:$uri") return false
+        return hasStoredImage(meta)
+    }
+
+    private fun hasStoredImage(meta: Meta): Boolean {
+        if (meta.bootMode == "iso") {
+            return paths.windowsIso.exists()
+        }
+        return paths.windowsImage.exists()
     }
 
     suspend fun download(
@@ -51,6 +59,7 @@ class WindowsImageManager(
             Meta(
                 source = url,
                 sizeBytes = paths.windowsImage.length(),
+                bootMode = "qcow2",
                 sha256 = sha256(paths.windowsImage),
             ),
         )
@@ -72,7 +81,12 @@ class WindowsImageManager(
         }.toMap()
         val source = map["source"] ?: map["url"] ?: return null
         val size = map["size"]?.toLongOrNull() ?: return null
-        return Meta(source = source, sizeBytes = size, sha256 = map["sha256"])
+        return Meta(
+            source = source,
+            sizeBytes = size,
+            bootMode = map["boot"],
+            sha256 = map["sha256"],
+        )
     }
 
     private fun writeMeta(meta: Meta) {

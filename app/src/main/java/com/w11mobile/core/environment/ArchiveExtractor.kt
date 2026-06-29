@@ -50,6 +50,27 @@ object ArchiveExtractor {
         error("data.tar не знайдено в ${debFile.name}")
     }
 
+    private fun normalizeEntryPath(name: String): String {
+        var path = name.trim()
+        while (path.startsWith("./")) {
+            path = path.removePrefix("./")
+        }
+        return path
+    }
+
+    private fun stripTermuxPrefix(path: String): String {
+        val prefixes = listOf(
+            "data/data/com.termux/files/",
+            "data/data/com.termux/files",
+        )
+        for (prefix in prefixes) {
+            if (path.startsWith(prefix)) {
+                return path.removePrefix(prefix).trimStart('/')
+            }
+        }
+        return path
+    }
+
     private fun extractTarEntries(
         tarInput: TarArchiveInputStream,
         destination: File,
@@ -57,8 +78,15 @@ object ArchiveExtractor {
     ) {
         var entry = tarInput.nextEntry
         while (entry != null) {
-            val relativePath = entry.name.removePrefix(stripPrefix)
-            if (relativePath.isNotBlank()) {
+            val normalized = normalizeEntryPath(entry.name)
+            val relativePath = when {
+                stripPrefix.isBlank() -> normalized
+                else -> {
+                    val stripped = normalized.removePrefix(stripPrefix).trimStart('/')
+                    if (stripped != normalized) stripped else stripTermuxPrefix(normalized)
+                }
+            }
+            if (relativePath.isNotBlank() && relativePath != "." && relativePath != "/") {
                 val target = File(destination, relativePath)
                 if (entry.isDirectory) {
                     target.mkdirs()

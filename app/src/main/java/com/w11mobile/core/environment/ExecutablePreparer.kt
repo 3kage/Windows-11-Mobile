@@ -17,9 +17,9 @@ object ExecutablePreparer {
     }
 
     fun sealForExecution(file: File) {
-        file.setReadable(true, ownerOnly = false)
-        file.setExecutable(true, ownerOnly = false)
-        file.setWritable(false, ownerOnly = false)
+        file.setReadable(true, false)
+        file.setExecutable(true, false)
+        file.setWritable(false, false)
         runCatching {
             Os.chmod(
                 file.absolutePath,

@@ -79,6 +79,7 @@ class PRootExecutor(
     private fun buildEnvironment(loaderPath: String): Map<String, String> = mapOf(
         "PROOT_LOADER" to loaderPath,
         "PROOT_NO_SECCOMP" to "1",
+        "LD_LIBRARY_PATH" to paths.libDir.absolutePath,
         "PATH" to "/system/bin:/system/xbin:/vendor/bin:${paths.binDir.absolutePath}",
         "HOME" to paths.baseDir.absolutePath,
         "TMPDIR" to paths.cacheDir.absolutePath,

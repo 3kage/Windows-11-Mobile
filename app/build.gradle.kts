@@ -1,3 +1,4 @@
+import java.net.URI
 import java.util.Properties
 
 plugins {
@@ -20,8 +21,8 @@ android {
         applicationId = "com.w11mobile.windows11"
         minSdk = 26
         targetSdk = 34
-        versionCode = 16
-        versionName = "1.3.12"
+        versionCode = 17
+        versionName = "1.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -71,6 +72,12 @@ android {
         viewBinding = true
         buildConfig = true
     }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 dependencies {
@@ -99,4 +106,38 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+}
+
+val alpineBusyboxOutput = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libalpine_busybox.so")
+
+tasks.register("prepareAlpineBusybox") {
+    val archiveUrl =
+        "https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/aarch64/alpine-minirootfs-3.20.3-aarch64.tar.gz"
+    outputs.file(alpineBusyboxOutput)
+
+    onlyIf {
+        !alpineBusyboxOutput.asFile.exists() || alpineBusyboxOutput.asFile.length() == 0L
+    }
+
+    doLast {
+        val outputFile = alpineBusyboxOutput.asFile
+        outputFile.parentFile.mkdirs()
+        val workDir = temporaryDir.resolve("alpine-busybox").apply { mkdirs() }
+        val archive = workDir.resolve("alpine-minirootfs.tar.gz")
+
+        URI(archiveUrl).toURL().openStream().use { input ->
+            archive.outputStream().use { output -> input.copyTo(output) }
+        }
+
+        providers.exec {
+            workingDir = workDir
+            commandLine("tar", "-xzf", archive.absolutePath, "./bin/busybox")
+        }.result.get()
+
+        workDir.resolve("bin/busybox").copyTo(outputFile, overwrite = true)
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn("prepareAlpineBusybox")
 }

@@ -27,6 +27,9 @@ class RootfsManager(
         require(RootfsEssentials.isReady(paths.rootfsDir)) {
             "Alpine rootfs пошкоджений після розпакування (${paths.rootfsDir.absolutePath})"
         }
+        require(paths.guestBusybox.exists() && paths.guestBusybox.length() > 0L) {
+            "libalpine_busybox.so відсутній у APK (перевстановіть застосунок)"
+        }
     }
 
     private fun isRootfsReady(): Boolean = RootfsEssentials.isReady(paths.rootfsDir)

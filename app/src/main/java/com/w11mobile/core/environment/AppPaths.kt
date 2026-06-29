@@ -5,10 +5,13 @@ import java.io.File
 class AppPaths(
     filesDir: File,
     codeCacheDir: File,
+    nativeLibraryDir: String,
 ) {
     val baseDir: File = filesDir
     val cacheDir: File = File(filesDir, "cache").apply { mkdirs() }
     val execDir: File = File(codeCacheDir, "exec").apply { mkdirs() }
+    val guestExecDir: File = File(codeCacheDir, "exec/guest").apply { mkdirs() }
+    val guestBusybox: File = File(nativeLibraryDir, "libalpine_busybox.so")
     val termuxRoot: File = File(filesDir, "termux").apply { mkdirs() }
     val termuxPrefix: File = File(termuxRoot, "usr").apply { mkdirs() }
     val binDir: File = File(termuxPrefix, "bin").apply { mkdirs() }

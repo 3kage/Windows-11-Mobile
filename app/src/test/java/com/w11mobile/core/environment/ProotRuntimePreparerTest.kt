@@ -9,7 +9,9 @@ class ProotRuntimePreparerTest {
     fun prepare_createsProotTmpAndGuestDirectories() {
         val base = createTempDir("w11mobile")
         try {
-            val paths = AppPaths(base, File(base, "code_cache"))
+            val nativeDir = File(base, "native").apply { mkdirs() }
+            File(nativeDir, "libalpine_busybox.so").writeBytes(ByteArray(8) { 1 })
+            val paths = AppPaths(base, File(base, "code_cache"), nativeDir.absolutePath)
 
             ProotRuntimePreparer.prepare(paths)
 

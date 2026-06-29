@@ -34,6 +34,9 @@ class PRootExecutor(
 
     private fun prepareRuntime() {
         ProotRuntimePreparer.prepare(paths)
+        require(paths.guestBusybox.exists() && paths.guestBusybox.length() > 0L) {
+            "Вбудований busybox (libalpine_busybox.so) відсутній. Перевстановіть APK."
+        }
         val loader = prootInstaller.findProotLoader()?.absolutePath
             ?: error("proot-loader не знайдено")
         require(paths.proot.canExecute()) { "proot не готовий до запуску" }
@@ -53,11 +56,20 @@ class PRootExecutor(
             add("/root")
             add("/bin/sh")
             add("-c")
-            add(command)
+            add(GuestShell.wrap(paths, command))
         }
 
     private fun buildBindArgs(extraBinds: List<String>): List<String> {
-        val binds = buildList {
+        val busybox = paths.guestBusybox.absolutePath
+        return buildList {
+            add("-b")
+            add("/system:/system")
+            add("-b")
+            add("$busybox:/bin/busybox")
+            add("-b")
+            add("$busybox:/bin/sh")
+            add("-b")
+            add("${paths.guestExecDir.absolutePath}:/exec/guest")
             add("-b")
             add("/dev")
             add("-b")
@@ -68,7 +80,6 @@ class PRootExecutor(
             add("${paths.imagesDir.absolutePath}:/images")
             addAll(extraBinds)
         }
-        return binds
     }
 
     private fun buildEnvironment(): Map<String, String> {
@@ -91,6 +102,7 @@ class PRootExecutor(
 object ProotRuntimePreparer {
     fun prepare(paths: AppPaths) {
         paths.prootTmpDir.mkdirs()
+        paths.guestExecDir.mkdirs()
         File(paths.rootfsDir, "root").mkdirs()
         File(paths.rootfsDir, "tmp").mkdirs()
         File(paths.rootfsDir, "images").mkdirs()

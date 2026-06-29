@@ -12,9 +12,9 @@ class PRootExecutor(
         command: String,
         extraBinds: List<String> = emptyList(),
     ): ShellExecutor.Result {
-        prepareRuntime()
+        val busybox = prepareRuntime()
         return shellExecutor.executeWithArgs(
-            args = buildProotArgs(extraBinds, command),
+            args = buildProotArgs(busybox, extraBinds, command),
             environment = buildEnvironment(),
         )
     }
@@ -24,50 +24,57 @@ class PRootExecutor(
         extraBinds: List<String> = emptyList(),
         onLine: (String) -> Unit,
     ): ShellExecutor.Result {
-        prepareRuntime()
+        val busybox = prepareRuntime()
         return shellExecutor.executeStreamingWithArgs(
-            args = buildProotArgs(extraBinds, command),
+            args = buildProotArgs(busybox, extraBinds, command),
             environment = buildEnvironment(),
             onLine = onLine,
         )
     }
 
-    private fun prepareRuntime() {
+    private fun prepareRuntime(): File {
         ProotRuntimePreparer.prepare(paths)
-        require(paths.guestBusybox.exists() && paths.guestBusybox.length() > 0L) {
-            "Вбудований busybox (libalpine_busybox.so) відсутній. Перевстановіть APK."
-        }
+        val busybox = GuestBusyboxStager.ensureReady(paths)
         val loader = prootInstaller.findProotLoader()?.absolutePath
             ?: error("proot-loader не знайдено")
         require(paths.proot.canExecute()) { "proot не готовий до запуску" }
         require(File(loader).length() > 0L) { "proot-loader пошкоджений" }
+        return busybox
     }
 
-    private fun buildProotArgs(extraBinds: List<String>, command: String): List<String> =
+    private fun buildProotArgs(
+        busybox: File,
+        extraBinds: List<String>,
+        command: String,
+    ): List<String> =
         buildList {
             add("/system/bin/linker64")
             add(paths.proot.absolutePath)
-            addAll(buildBindArgs(extraBinds))
+            addAll(buildBindArgs(busybox, extraBinds))
             add("--link2symlink")
             add("-0")
             add("-r")
             add(paths.rootfsDir.absolutePath)
             add("-w")
             add("/root")
-            add("/bin/sh")
+            add("/system/bin/linker64")
+            add("/exec/busybox")
+            add("sh")
             add("-c")
             add(GuestShell.wrap(paths, command))
         }
 
-    private fun buildBindArgs(extraBinds: List<String>): List<String> {
-        val busybox = paths.guestBusybox.absolutePath
+    private fun buildBindArgs(busybox: File, extraBinds: List<String>): List<String> {
+        val busyboxPath = busybox.absolutePath
         return buildList {
             add("-b")
             add("/system:/system")
             add("-b")
-            add("$busybox:/bin/busybox")
+            add("$busyboxPath:/exec/busybox")
             add("-b")
-            add("$busybox:/bin/sh")
+            add("$busyboxPath:/bin/busybox")
+            add("-b")
+            add("$busyboxPath:/bin/sh")
             add("-b")
             add("${paths.guestExecDir.absolutePath}:/exec/guest")
             add("-b")

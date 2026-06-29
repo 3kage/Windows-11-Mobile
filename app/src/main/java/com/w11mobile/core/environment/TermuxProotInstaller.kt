@@ -11,16 +11,20 @@ class TermuxProotInstaller(
     suspend fun install(
         onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit = { _, _ -> },
     ) {
-        if (paths.proot.exists() && paths.prootLoader.exists()) {
+        if (isProotReady()) {
             ExecutablePreparer.sealForExecution(paths.proot)
             ExecutablePreparer.sealForExecution(paths.prootLoader)
             return
         }
 
-        val debFile = File(paths.cacheDir, "proot.deb")
-        val prootUrl = packageResolver.resolveDebUrl(packageName = "proot")
-        downloadManager.download(prootUrl, debFile, onProgress)
-        ArchiveExtractor.extractTermuxDeb(debFile, paths.termuxPrefix)
+        val packages = packageResolver.resolveInstallOrder("proot")
+        for (packageName in packages) {
+            val debFile = File(paths.cacheDir, "$packageName.deb")
+            val packageUrl = packageResolver.resolveDebUrl(packageName)
+            downloadManager.download(packageUrl, debFile, onProgress)
+            ArchiveExtractor.extractTermuxDeb(debFile, paths.termuxPrefix)
+            debFile.delete()
+        }
 
         require(paths.extractedProot.exists()) {
             "proot не знайдено після розпакування (${paths.extractedProot.absolutePath})"
@@ -35,11 +39,19 @@ class TermuxProotInstaller(
                 },
             )
 
+        require(File(paths.libDir, "libtalloc.so.2").exists()) {
+            "libtalloc.so.2 не знайдено в ${paths.libDir.absolutePath}"
+        }
+
         ExecutablePreparer.installExecutable(paths.extractedProot, paths.proot)
         ExecutablePreparer.installExecutable(extractedLoader, paths.prootLoader)
-
-        debFile.delete()
     }
+
+    fun isProotReady(): Boolean =
+        paths.proot.exists() &&
+            paths.prootLoader.exists() &&
+            File(paths.libDir, "libtalloc.so.2").exists() &&
+            File(paths.libDir, "libandroid-shmem.so").exists()
 
     fun findProotLoader(): File? =
         paths.prootLoader.takeIf { it.exists() && it.length() > 0L }

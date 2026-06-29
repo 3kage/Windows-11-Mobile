@@ -136,6 +136,7 @@ class EnvironmentSetupOrchestrator(
         }
         onLog("PRoot: ${paths.proot.absolutePath}\n")
         onLog("Loader: ${prootInstaller.findProotLoader()?.absolutePath}\n")
+        onLog("Libs: ${paths.libDir.absolutePath}\n")
     }
 
     private suspend fun installRootfs() {

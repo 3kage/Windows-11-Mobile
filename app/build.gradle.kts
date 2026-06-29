@@ -1,6 +1,15 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore/keystore.properties")
+    if (file.exists()) {
+        load(file.inputStream())
+    }
 }
 
 android {
@@ -11,8 +20,8 @@ android {
         applicationId = "com.w11mobile"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.3.1"
+        versionCode = 6
+        versionName = "1.3.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -23,8 +32,24 @@ android {
         )
     }
 
+    signingConfigs {
+        create("upload") {
+            val storeFilePath = keystoreProperties.getProperty("storeFile")
+            if (storeFilePath != null) {
+                storeFile = rootProject.file(storeFilePath)
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("upload")
+        }
         release {
+            signingConfig = signingConfigs.getByName("upload")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

@@ -14,7 +14,7 @@ class EnvironmentSetupOrchestrator(
     private val onProgressChanged: (Int, Boolean) -> Unit,
     private val onLog: (String) -> Unit,
 ) {
-    private val paths = AppPaths(application.filesDir)
+    private val paths = AppPaths(application.filesDir, application.codeCacheDir)
     private val downloadManager = DownloadManager()
     private val shellExecutor = ShellExecutor(
         workingDirectory = application.filesDir,

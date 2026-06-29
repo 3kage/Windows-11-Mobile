@@ -11,19 +11,22 @@ class TermuxProotInstaller(
     suspend fun install(
         onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit = { _, _ -> },
     ) {
-        if (paths.proot.canExecute() && findProotLoader()?.canExecute() == true) return
+        if (paths.proot.exists() && paths.prootLoader.exists()) {
+            ExecutablePreparer.sealForExecution(paths.proot)
+            ExecutablePreparer.sealForExecution(paths.prootLoader)
+            return
+        }
 
         val debFile = File(paths.cacheDir, "proot.deb")
         val prootUrl = packageResolver.resolveDebUrl(packageName = "proot")
         downloadManager.download(prootUrl, debFile, onProgress)
         ArchiveExtractor.extractTermuxDeb(debFile, paths.termuxPrefix)
 
-        require(paths.proot.exists()) {
-            "proot не знайдено після розпакування (${paths.proot.absolutePath})"
+        require(paths.extractedProot.exists()) {
+            "proot не знайдено після розпакування (${paths.extractedProot.absolutePath})"
         }
-        paths.proot.setExecutable(true, false)
 
-        val loader = findProotLoader()
+        val extractedLoader = findExtractedLoader()
             ?: error(
                 buildString {
                     append("proot-loader не знайдено після розпакування Termux-пакета.\n")
@@ -31,12 +34,17 @@ class TermuxProotInstaller(
                     append("Вміст libexec: ${paths.libexecDir.list()?.joinToString() ?: "порожньо"}")
                 },
             )
-        loader.setExecutable(true, false)
+
+        ExecutablePreparer.installExecutable(paths.extractedProot, paths.proot)
+        ExecutablePreparer.installExecutable(extractedLoader, paths.prootLoader)
 
         debFile.delete()
     }
 
-    fun findProotLoader(): File? {
+    fun findProotLoader(): File? =
+        paths.prootLoader.takeIf { it.exists() && it.length() > 0L }
+
+    private fun findExtractedLoader(): File? {
         val candidates = listOf(
             File(paths.libexecDir, "proot/loader"),
             File(paths.libexecDir, "proot/loader32"),

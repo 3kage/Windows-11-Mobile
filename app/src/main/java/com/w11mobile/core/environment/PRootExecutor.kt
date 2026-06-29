@@ -17,6 +17,7 @@ class PRootExecutor(
             ?: error("proot-loader не знайдено")
 
         val args = buildList {
+            add("/system/bin/linker64")
             add(proot)
             addAll(buildBindArgs(extraBinds))
             add("--link2symlink")
@@ -41,6 +42,7 @@ class PRootExecutor(
             ?: error("proot-loader не знайдено")
 
         val args = buildList {
+            add("/system/bin/linker64")
             add(proot)
             addAll(buildBindArgs(extraBinds))
             add("--link2symlink")

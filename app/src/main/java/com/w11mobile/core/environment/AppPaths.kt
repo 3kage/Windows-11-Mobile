@@ -2,13 +2,19 @@ package com.w11mobile.core.environment
 
 import java.io.File
 
-class AppPaths(filesDir: File) {
+class AppPaths(
+    filesDir: File,
+    codeCacheDir: File,
+) {
     val baseDir: File = filesDir
     val cacheDir: File = File(filesDir, "cache").apply { mkdirs() }
+    val execDir: File = File(codeCacheDir, "exec").apply { mkdirs() }
     val termuxPrefix: File = File(filesDir, "termux/usr").apply { mkdirs() }
     val binDir: File = File(termuxPrefix, "bin").apply { mkdirs() }
     val libexecDir: File = File(termuxPrefix, "libexec").apply { mkdirs() }
-    val proot: File = File(binDir, "proot")
+    val extractedProot: File = File(binDir, "proot")
+    val proot: File = File(execDir, "proot")
+    val prootLoader: File = File(execDir, "proot-loader")
     val rootfsDir: File = File(filesDir, "rootfs").apply { mkdirs() }
     val imagesDir: File = File(filesDir, "images").apply { mkdirs() }
     val windowsIso: File = File(imagesDir, "windows.iso")

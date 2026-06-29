@@ -21,20 +21,19 @@ class RootfsManager(
         downloadManager.download(EnvironmentUrls.ALPINE_ROOTFS_AARCH64, archive, onProgress)
         ArchiveExtractor.extractTarGz(archive, paths.rootfsDir)
         configureRootfs()
+        RootfsEssentials.repair(paths.rootfsDir)
         archive.delete()
 
-        require(isRootfsReady()) {
+        require(RootfsEssentials.isReady(paths.rootfsDir)) {
             "Alpine rootfs пошкоджений після розпакування (${paths.rootfsDir.absolutePath})"
         }
     }
 
-    private fun isRootfsReady(): Boolean {
-        val shell = File(paths.rootfsDir, "bin/sh")
-        return shell.exists() && shell.isFile && shell.length() > 0L
-    }
+    private fun isRootfsReady(): Boolean = RootfsEssentials.isReady(paths.rootfsDir)
 
     fun configureRootfs() {
         ProotRuntimePreparer.prepare(paths)
+        RootfsEssentials.repair(paths.rootfsDir)
         writeFile(File(paths.rootfsDir, "etc/resolv.conf"), "nameserver 8.8.8.8\nnameserver 8.8.4.4\n")
         writeFile(
             File(paths.rootfsDir, "etc/apk/repositories"),

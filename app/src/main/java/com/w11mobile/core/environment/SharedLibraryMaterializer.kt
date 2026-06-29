@@ -1,28 +1,34 @@
 package com.w11mobile.core.environment
 
-import android.system.Os
-import org.apache.commons.compress.archivers.tar.TarArchiveEntry
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import java.io.File
 
 object SharedLibraryMaterializer {
+    private val VERSIONED_SO = Regex("""^(.+\.so)((?:\.\d+)+)$""")
+
     fun materialize(libDir: File) {
         if (!libDir.isDirectory) return
 
         libDir.listFiles()
-            ?.filter { it.isFile && it.name.endsWith(".so") && it.length() == 0L }
+            ?.filter { it.isFile && it.length() == 0L }
             ?.forEach { it.delete() }
 
         libDir.listFiles()
-            ?.filter { it.isFile && it.name.contains(".so.") && it.length() > 0L }
+            ?.filter { it.isFile && it.length() > 0L }
+            ?.filter { VERSIONED_SO.matches(it.name) }
             ?.forEach { versionedLib ->
-                val majorLibName = versionedLib.name.substringBeforeLast('.')
-                copyLibrary(versionedLib, File(libDir, majorLibName))
+                val match = VERSIONED_SO.matchEntire(versionedLib.name) ?: return@forEach
+                val baseName = match.groupValues[1]
+                val versionParts = match.groupValues[2].trimStart('.').split('.')
 
-                if (majorLibName.contains(".so.")) {
-                    val baseLibName = majorLibName.substringBefore(".so.") + ".so"
-                    copyLibrary(versionedLib, File(libDir, baseLibName))
+                for (index in versionParts.indices) {
+                    val aliasName = buildString {
+                        append(baseName)
+                        append('.')
+                        append(versionParts.take(index + 1).joinToString("."))
+                    }
+                    copyLibrary(versionedLib, File(libDir, aliasName))
                 }
+                copyLibrary(versionedLib, File(libDir, baseName))
             }
     }
 

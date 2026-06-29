@@ -12,10 +12,15 @@ class TermuxProotInstaller(
         onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit = { _, _ -> },
     ) {
         if (isProotReady()) {
-            ExecutablePreparer.sealForExecution(paths.proot)
-            ExecutablePreparer.sealForExecution(paths.prootLoader)
-            return
+            SharedLibraryMaterializer.materialize(paths.libDir)
+            if (isProotReady()) {
+                ExecutablePreparer.sealForExecution(paths.proot)
+                ExecutablePreparer.sealForExecution(paths.prootLoader)
+                return
+            }
         }
+
+        purgeCorruptedInstall()
 
         val packages = packageResolver.resolveInstallOrder("proot")
         for (packageName in packages) {
@@ -57,6 +62,17 @@ class TermuxProotInstaller(
 
     private fun isSharedLibraryReady(library: File): Boolean =
         library.exists() && library.isFile && library.length() > 0L
+
+    private fun purgeCorruptedInstall() {
+        paths.libDir.listFiles()
+            ?.filter { it.isFile && it.length() == 0L }
+            ?.forEach { it.delete() }
+
+        if (!isSharedLibraryReady(File(paths.libDir, "libtalloc.so.2"))) {
+            paths.proot.delete()
+            paths.prootLoader.delete()
+        }
+    }
 
     fun findProotLoader(): File? =
         paths.prootLoader.takeIf { it.exists() && it.length() > 0L }

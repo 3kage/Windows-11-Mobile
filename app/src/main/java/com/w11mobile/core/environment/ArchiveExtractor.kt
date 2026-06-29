@@ -108,20 +108,56 @@ object ArchiveExtractor {
             entry = tarInput.nextEntry
         }
 
-        pendingSymlinks.forEach { (target, linkName) ->
-            materializeSymlink(target, linkName)
-        }
+        materializePendingSymlinks(destination, pendingSymlinks)
     }
 
-    private fun materializeSymlink(target: File, linkName: String) {
-        if (target.exists()) target.delete()
-        runCatching {
-            Os.symlink(linkName, target.absolutePath)
-        }.onFailure {
-            val resolved = File(target.parentFile, linkName)
-            if (resolved.exists() && resolved.isFile && resolved.length() > 0L) {
-                resolved.copyTo(target, overwrite = true)
+    private fun materializePendingSymlinks(
+        root: File,
+        pendingSymlinks: List<Pair<File, String>>,
+    ) {
+        var remaining = pendingSymlinks
+        repeat(8) {
+            if (remaining.isEmpty()) return
+            val unresolved = mutableListOf<Pair<File, String>>()
+            remaining.forEach { (target, linkName) ->
+                if (!materializeSymlink(root, target, linkName)) {
+                    unresolved += target to linkName
+                }
+            }
+            remaining = unresolved
+        }
+
+        remaining.forEach { (target, _) ->
+            if (target.exists() && target.length() == 0L) {
+                target.delete()
             }
         }
     }
+
+    private fun materializeSymlink(root: File, target: File, linkName: String): Boolean {
+        if (target.exists() && target.length() > 0L) return true
+
+        if (target.exists()) target.delete()
+
+        runCatching {
+            Os.symlink(linkName, target.absolutePath)
+        }.onSuccess {
+            return target.exists()
+        }
+
+        val resolved = resolveSymlinkTarget(root, target, linkName)
+        if (resolved.isFile && resolved.length() > 0L) {
+            resolved.copyTo(target, overwrite = true)
+            return target.length() > 0L
+        }
+
+        return false
+    }
+
+    private fun resolveSymlinkTarget(root: File, target: File, linkName: String): File =
+        if (linkName.startsWith("/")) {
+            File(root, linkName.removePrefix("/"))
+        } else {
+            File(target.parentFile, linkName)
+        }
 }

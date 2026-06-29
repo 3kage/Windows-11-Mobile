@@ -28,6 +28,7 @@ local.properties
 # Keystore
 *.jks
 *.keystore
+!keystore/w11mobile-upload.jks
 
 # Log/OS
 *.log

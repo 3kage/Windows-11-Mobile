@@ -6,13 +6,16 @@ class TermuxProotInstaller(
     private val paths: AppPaths,
     private val downloadManager: DownloadManager,
 ) {
+    private val packageResolver = TermuxPackageResolver(paths.cacheDir, downloadManager)
+
     suspend fun install(
         onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit = { _, _ -> },
     ) {
         if (paths.proot.canExecute()) return
 
         val debFile = File(paths.cacheDir, "proot.deb")
-        downloadManager.download(EnvironmentUrls.PROOT_DEB_AARCH64, debFile, onProgress)
+        val prootUrl = packageResolver.resolveDebUrl(packageName = "proot")
+        downloadManager.download(prootUrl, debFile, onProgress)
         ArchiveExtractor.extractTermuxDeb(debFile, paths.termuxPrefix)
 
         paths.proot.setExecutable(true, false)

@@ -1,6 +1,8 @@
 package com.w11mobile.core.environment
 
+import android.system.Os
 import org.apache.commons.compress.archivers.ar.ArArchiveInputStream
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
 import java.io.File
@@ -76,6 +78,7 @@ object ArchiveExtractor {
         destination: File,
         stripPrefix: String,
     ) {
+        val pendingSymlinks = mutableListOf<Pair<File, String>>()
         var entry = tarInput.nextEntry
         while (entry != null) {
             val normalized = normalizeEntryPath(entry.name)
@@ -88,16 +91,37 @@ object ArchiveExtractor {
             }
             if (relativePath.isNotBlank() && relativePath != "." && relativePath != "/") {
                 val target = File(destination, relativePath)
-                if (entry.isDirectory) {
-                    target.mkdirs()
-                } else {
-                    target.parentFile?.mkdirs()
-                    target.outputStream().use { output ->
-                        tarInput.copyTo(output)
+                when {
+                    entry.isDirectory -> target.mkdirs()
+                    entry is TarArchiveEntry && entry.isSymbolicLink -> {
+                        target.parentFile?.mkdirs()
+                        pendingSymlinks += target to entry.linkName
+                    }
+                    else -> {
+                        target.parentFile?.mkdirs()
+                        target.outputStream().use { output ->
+                            tarInput.copyTo(output)
+                        }
                     }
                 }
             }
             entry = tarInput.nextEntry
+        }
+
+        pendingSymlinks.forEach { (target, linkName) ->
+            materializeSymlink(target, linkName)
+        }
+    }
+
+    private fun materializeSymlink(target: File, linkName: String) {
+        if (target.exists()) target.delete()
+        runCatching {
+            Os.symlink(linkName, target.absolutePath)
+        }.onFailure {
+            val resolved = File(target.parentFile, linkName)
+            if (resolved.exists() && resolved.isFile && resolved.length() > 0L) {
+                resolved.copyTo(target, overwrite = true)
+            }
         }
     }
 }

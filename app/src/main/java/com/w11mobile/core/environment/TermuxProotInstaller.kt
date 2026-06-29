@@ -26,6 +26,8 @@ class TermuxProotInstaller(
             debFile.delete()
         }
 
+        SharedLibraryMaterializer.materialize(paths.libDir)
+
         require(paths.extractedProot.exists()) {
             "proot не знайдено після розпакування (${paths.extractedProot.absolutePath})"
         }
@@ -39,8 +41,8 @@ class TermuxProotInstaller(
                 },
             )
 
-        require(File(paths.libDir, "libtalloc.so.2").exists()) {
-            "libtalloc.so.2 не знайдено в ${paths.libDir.absolutePath}"
+        require(isSharedLibraryReady(File(paths.libDir, "libtalloc.so.2"))) {
+            "libtalloc.so.2 пошкоджено або порожнє в ${paths.libDir.absolutePath}"
         }
 
         ExecutablePreparer.installExecutable(paths.extractedProot, paths.proot)
@@ -50,8 +52,11 @@ class TermuxProotInstaller(
     fun isProotReady(): Boolean =
         paths.proot.exists() &&
             paths.prootLoader.exists() &&
-            File(paths.libDir, "libtalloc.so.2").exists() &&
-            File(paths.libDir, "libandroid-shmem.so").exists()
+            isSharedLibraryReady(File(paths.libDir, "libtalloc.so.2")) &&
+            isSharedLibraryReady(File(paths.libDir, "libandroid-shmem.so"))
+
+    private fun isSharedLibraryReady(library: File): Boolean =
+        library.exists() && library.isFile && library.length() > 0L
 
     fun findProotLoader(): File? =
         paths.prootLoader.takeIf { it.exists() && it.length() > 0L }

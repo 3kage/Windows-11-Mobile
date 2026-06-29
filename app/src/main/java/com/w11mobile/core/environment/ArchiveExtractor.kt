@@ -1,5 +1,6 @@
 package com.w11mobile.core.environment
 
+import android.system.Os
 import org.apache.commons.compress.archivers.ar.ArArchiveInputStream
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.xz.XZCompressorInputStream
@@ -88,12 +89,25 @@ object ArchiveExtractor {
             }
             if (relativePath.isNotBlank() && relativePath != "." && relativePath != "/") {
                 val target = File(destination, relativePath)
-                if (entry.isDirectory) {
-                    target.mkdirs()
-                } else {
-                    target.parentFile?.mkdirs()
-                    target.outputStream().use { output ->
-                        tarInput.copyTo(output)
+                when {
+                    entry.isDirectory -> target.mkdirs()
+                    entry is TarArchiveEntry && entry.isSymbolicLink -> {
+                        target.parentFile?.mkdirs()
+                        if (target.exists()) target.delete()
+                        runCatching {
+                            Os.symlink(entry.linkName, target.absolutePath)
+                        }.onFailure {
+                            val resolved = File(target.parentFile, entry.linkName)
+                            if (resolved.exists() && resolved.isFile) {
+                                resolved.copyTo(target, overwrite = true)
+                            }
+                        }
+                    }
+                    else -> {
+                        target.parentFile?.mkdirs()
+                        target.outputStream().use { output ->
+                            tarInput.copyTo(output)
+                        }
                     }
                 }
             }

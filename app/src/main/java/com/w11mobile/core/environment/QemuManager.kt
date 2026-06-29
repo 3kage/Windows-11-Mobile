@@ -6,38 +6,49 @@ import java.io.File
 class QemuManager(
     private val paths: AppPaths,
     private val prootExecutor: PRootExecutor,
+    private val guestBinaryInstaller: TermuxGuestBinaryInstaller,
 ) {
-    private val markerFile = File(paths.cacheDir, "qemu_aarch64_installed.marker")
+    private val markerFile = File(paths.cacheDir, "qemu_termux_installed.marker")
+
+    private val guestBinaries = listOf(
+        "qemu-system-aarch64-headless",
+        "qemu-system-x86-64-headless",
+        "qemu-img",
+    )
 
     suspend fun install(onLog: (String) -> Unit): ShellExecutor.Result {
-        val legacyMarker = File(paths.cacheDir, "qemu_installed.marker")
-        if (markerFile.exists()) {
+        val legacyMarker = File(paths.cacheDir, "qemu_aarch64_installed.marker")
+        if (legacyMarker.exists()) {
+            onLog("Оновлення QEMU до Termux/Android-сумісної збірки...")
+            legacyMarker.delete()
+            File(paths.cacheDir, "qemu_installed.marker").delete()
+            markerFile.delete()
+        }
+
+        if (markerFile.exists() && guestBinaryInstaller.isInstalled(guestBinaries)) {
             onLog("QEMU вже встановлено.")
             return verifyInstallation(onLog)
         }
-        if (legacyMarker.exists()) {
-            onLog("Оновлення QEMU для підтримки Windows 11 ARM64...")
-            legacyMarker.delete()
-        }
 
-        onLog("Оновлення apk-репозиторіїв Alpine...")
+        onLog("Завантаження QEMU (Termux, Android/bionic)...")
+        guestBinaryInstaller.installExecutables(
+            packages = listOf(
+                "qemu-utils",
+                "qemu-system-aarch64-headless",
+                "qemu-system-x86-64-headless",
+            ),
+            executables = mapOf(
+                "qemu-system-aarch64-headless" to "qemu-system-aarch64-headless",
+                "qemu-system-x86-64-headless" to "qemu-system-x86-64-headless",
+                "qemu-img" to "qemu-img",
+            ),
+        )
+
+        onLog("Встановлення UEFI firmware (Alpine apk)...")
         var result = prootExecutor.execInRootfs(
             """
-            export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
             apk update
-            """.trimIndent(),
-        )
-        if (!result.success) return result
-
-        onLog("Встановлення QEMU ARM64/x86_64 та UEFI firmware...")
-        result = prootExecutor.execInRootfs(
-            """
-            export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-            apk add --no-cache \
-              qemu-system-aarch64 \
-              qemu-system-x86_64 \
-              qemu-img \
-              edk2-aarch64
+            apk add --no-cache edk2-aarch64
             """.trimIndent(),
         )
         if (!result.success) return result
@@ -49,9 +60,8 @@ class QemuManager(
     suspend fun verifyInstallation(onLog: (String) -> Unit): ShellExecutor.Result {
         val result = prootExecutor.execInRootfs(
             """
-            export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-            qemu-system-aarch64 --version
-            qemu-system-x86_64 --version
+            ${GuestShell.termuxBinary(paths, "qemu-system-aarch64-headless", "--version")}
+            ${GuestShell.termuxBinary(paths, "qemu-system-x86-64-headless", "--version")}
             ls -lh /usr/share/edk2-aarch64/QEMU_EFI.fd
             """.trimIndent(),
         )
@@ -67,10 +77,11 @@ class QemuManager(
 
         onLog("Створення віртуального диска 48 GB для Windows...\n")
         return prootExecutor.execInRootfs(
-            """
-            export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-            qemu-img create -f qcow2 /images/${paths.windowsDisk.name} 48G
-            """.trimIndent(),
+            GuestShell.termuxBinary(
+                paths,
+                "qemu-img",
+                "create -f qcow2 /images/${paths.windowsDisk.name} 48G",
+            ),
         )
     }
 
@@ -106,43 +117,43 @@ class QemuManager(
     }
 
     private fun buildArm64Command(config: WindowsImageConfig): String {
+        val qemu = GuestShell.termuxBinary(
+            paths,
+            "qemu-system-aarch64-headless",
+            buildArm64Arguments(config),
+        )
+        return qemu
+    }
+
+    private fun buildArm64Arguments(config: WindowsImageConfig): String {
+        val commonTail = """
+            -machine virt,gic-version=3 \
+            -cpu max \
+            -smp 4 \
+            -m 4096 \
+            -drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2-aarch64/QEMU_EFI.fd \
+            -netdev user,id=net0 \
+            -device virtio-net-device,netdev=net0 \
+            -display none \
+            -serial mon:stdio \
+            -no-reboot
+        """.trimIndent()
+
         return if (config.bootMode == WindowsBootMode.ISO) {
             """
-            export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-            qemu-system-aarch64 \
-              -machine virt,gic-version=3 \
-              -cpu max \
-              -smp 4 \
-              -m 4096 \
-              -drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2-aarch64/QEMU_EFI.fd \
-              -drive if=none,file=/images/${paths.windowsIso.name},format=raw,media=cdrom,id=winiso \
-              -device virtio-scsi-device,id=scsi0 \
-              -device scsi-cd,bus=scsi0.0,drive=winiso,bootindex=0 \
-              -drive if=none,file=/images/${paths.windowsDisk.name},format=qcow2,id=windisk \
-              -device scsi-hd,bus=scsi0.0,drive=windisk,bootindex=1 \
-              -netdev user,id=net0 \
-              -device virtio-net-device,netdev=net0 \
-              -display none \
-              -serial mon:stdio \
-              -no-reboot
+            -drive if=none,file=/images/${paths.windowsIso.name},format=raw,media=cdrom,id=winiso \
+            -device virtio-scsi-device,id=scsi0 \
+            -device scsi-cd,bus=scsi0.0,drive=winiso,bootindex=0 \
+            -drive if=none,file=/images/${paths.windowsDisk.name},format=qcow2,id=windisk \
+            -device scsi-hd,bus=scsi0.0,drive=windisk,bootindex=1 \
+            $commonTail
             """.trimIndent()
         } else {
             val disk = config.diskFileName ?: paths.windowsImage.name
             """
-            export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-            qemu-system-aarch64 \
-              -machine virt,gic-version=3 \
-              -cpu max \
-              -smp 4 \
-              -m 4096 \
-              -drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2-aarch64/QEMU_EFI.fd \
-              -drive if=none,file=/images/$disk,format=qcow2,id=windisk \
-              -device virtio-blk-device,drive=windisk,bootindex=1 \
-              -netdev user,id=net0 \
-              -device virtio-net-device,netdev=net0 \
-              -display none \
-              -serial mon:stdio \
-              -no-reboot
+            -drive if=none,file=/images/$disk,format=qcow2,id=windisk \
+            -device virtio-blk-device,drive=windisk,bootindex=1 \
+            $commonTail
             """.trimIndent()
         }
     }
@@ -155,20 +166,22 @@ class QemuManager(
         val driveFormat = if (config.bootMode == WindowsBootMode.ISO) "raw" else "qcow2"
         val bootDevice = if (config.bootMode == WindowsBootMode.ISO) "-boot d" else ""
 
-        return """
-            export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-            qemu-system-x86_64 \
-              -machine q35 \
-              -cpu qemu64 \
-              -smp 2 \
-              -m 2048 \
-              -drive file=/images/$disk,if=virtio,format=$driveFormat \
-              $bootDevice \
-              -netdev user,id=net0 \
-              -device virtio-net-pci,netdev=net0 \
-              -display none \
-              -serial mon:stdio \
-              -no-reboot
-        """.trimIndent()
+        return GuestShell.termuxBinary(
+            paths,
+            "qemu-system-x86-64-headless",
+            """
+            -machine q35 \
+            -cpu qemu64 \
+            -smp 2 \
+            -m 2048 \
+            -drive file=/images/$disk,if=virtio,format=$driveFormat \
+            $bootDevice \
+            -netdev user,id=net0 \
+            -device virtio-net-pci,netdev=net0 \
+            -display none \
+            -serial mon:stdio \
+            -no-reboot
+            """.trimIndent(),
+        )
     }
 }

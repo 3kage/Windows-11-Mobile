@@ -14,7 +14,11 @@ class EnvironmentSetupOrchestrator(
     private val onProgressChanged: (Int, Boolean) -> Unit,
     private val onLog: (String) -> Unit,
 ) {
-    private val paths = AppPaths(application.filesDir, application.codeCacheDir)
+    private val paths = AppPaths(
+        application.filesDir,
+        application.codeCacheDir,
+        application.applicationInfo.nativeLibraryDir,
+    )
     private val downloadManager = DownloadManager()
     private val shellExecutor = ShellExecutor(
         workingDirectory = application.filesDir,
@@ -27,7 +31,8 @@ class EnvironmentSetupOrchestrator(
     private val prootInstaller = TermuxProotInstaller(paths, downloadManager)
     private val rootfsManager = RootfsManager(paths, downloadManager)
     private val prootExecutor = PRootExecutor(paths, prootInstaller, shellExecutor)
-    private val qemuManager = QemuManager(paths, prootExecutor)
+    private val guestBinaryInstaller = TermuxGuestBinaryInstaller(paths, downloadManager)
+    private val qemuManager = QemuManager(paths, prootExecutor, guestBinaryInstaller)
     private val windowsImageManager = WindowsImageManager(paths, downloadManager)
     private val localImageImporter = LocalImageImporter(application, paths)
 
@@ -108,7 +113,8 @@ class EnvironmentSetupOrchestrator(
     fun isEnvironmentReady(): Boolean =
         paths.proot.canExecute() &&
             File(paths.rootfsDir, "bin/sh").exists() &&
-            (File(paths.cacheDir, "qemu_aarch64_installed.marker").exists() ||
+            (            File(paths.cacheDir, "qemu_termux_installed.marker").exists() ||
+                File(paths.cacheDir, "qemu_aarch64_installed.marker").exists() ||
                 File(paths.cacheDir, "qemu_installed.marker").exists())
 
     fun canLaunchWindows(): Boolean =
@@ -297,11 +303,11 @@ class EnvironmentSetupOrchestrator(
             if (isoFile.exists()) isoFile.delete()
             require(importedFile.renameTo(isoFile)) { "Не вдалося перемістити ISO" }
             val result = prootExecutor.execInRootfs(
-                """
-                export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-                qemu-img convert -O qcow2 /images/windows.iso /images/windows.qcow2
-                rm -f /images/windows.iso
-                """.trimIndent(),
+                GuestShell.termuxBinary(
+                    paths,
+                    "qemu-img",
+                    "convert -O qcow2 /images/windows.iso /images/windows.qcow2 && rm -f /images/windows.iso",
+                ),
             )
             logResult(result)
             require(result.success) { "Не вдалося конвертувати ISO в QCOW2" }
@@ -345,10 +351,9 @@ class EnvironmentSetupOrchestrator(
     private suspend fun verifyEnvironment() {
         val result = prootExecutor.execInRootfs(
             """
-            export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
             echo "=== Перевірка ==="
-            which qemu-system-aarch64
-            which qemu-system-x86_64
+            ls -lh /exec/guest
+            ${GuestShell.termuxBinary(paths, "qemu-system-aarch64-headless", "--version")}
             ls -lh /usr/share/edk2-aarch64/QEMU_EFI.fd
             ls -lh /images || true
             """.trimIndent(),

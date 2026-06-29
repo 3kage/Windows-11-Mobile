@@ -10,17 +10,16 @@ object RootfsEssentials {
 
         repairBinary(rootfsDir, "bin/sh", busybox)
         repairBinary(rootfsDir, "bin/ash", busybox)
+        RootfsPermissions.sealGuestBinaries(rootfsDir)
     }
 
     fun isReady(rootfsDir: File): Boolean {
         val busybox = File(rootfsDir, "bin/busybox")
         val shell = File(rootfsDir, "bin/sh")
-        return isRegularFile(busybox) && isUsableShell(shell)
-    }
-
-    private fun isUsableShell(shell: File): Boolean {
+        if (!RootfsPermissions.isExecutableForGuest(busybox)) return false
+        if (!shell.exists()) return false
         if (Files.isSymbolicLink(shell.toPath())) return true
-        return isRegularFile(shell)
+        return RootfsPermissions.isExecutableForGuest(shell)
     }
 
     private fun isRegularFile(file: File): Boolean =
@@ -28,14 +27,20 @@ object RootfsEssentials {
 
     private fun repairBinary(rootfsDir: File, relativePath: String, source: File) {
         val target = File(rootfsDir, relativePath)
-        if (isRegularFile(target) && target.length() >= source.length()) return
-        if (Files.isSymbolicLink(target.toPath())) return
+        val needsCopy = !Files.isSymbolicLink(target.toPath()) &&
+            (!isRegularFile(target) || target.length() < source.length())
 
-        Files.deleteIfExists(target.toPath())
-        source.inputStream().use { input ->
-            target.outputStream().use { output ->
-                input.copyTo(output)
+        if (needsCopy) {
+            Files.deleteIfExists(target.toPath())
+            source.inputStream().use { input ->
+                target.outputStream().use { output ->
+                    input.copyTo(output)
+                }
             }
+        }
+
+        if (!Files.isSymbolicLink(target.toPath()) && target.exists()) {
+            RootfsPermissions.sealExecutable(target)
         }
     }
 }

@@ -101,6 +101,9 @@ object ArchiveExtractor {
                         target.outputStream().use { output ->
                             tarInput.copyTo(output)
                         }
+                        if (entry is TarArchiveEntry) {
+                            RootfsPermissions.applyTarMode(target, entry)
+                        }
                     }
                 }
             }

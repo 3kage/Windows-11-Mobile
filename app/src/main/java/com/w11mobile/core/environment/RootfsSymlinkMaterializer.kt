@@ -30,6 +30,8 @@ object RootfsSymlinkMaterializer {
                 deleteEntry(target)
             }
         }
+
+        RootfsPermissions.sealGuestBinaries(root)
     }
 
     private fun materializeOne(root: File, target: File, linkName: String): Boolean {
@@ -50,6 +52,7 @@ object RootfsSymlinkMaterializer {
 
             if (isEssential(root, target)) {
                 writeRegularFileCopy(target, resolved)
+                RootfsPermissions.sealExecutable(target)
                 return target.length() > 0L
             }
 

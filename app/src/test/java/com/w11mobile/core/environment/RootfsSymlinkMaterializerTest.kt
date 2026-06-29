@@ -41,6 +41,7 @@ class RootfsSymlinkMaterializerTest {
                 root,
                 listOf(shell to "/bin/busybox"),
             )
+            RootfsEssentials.repair(root)
 
             assertTrue(RootfsEssentials.isReady(root))
         } finally {

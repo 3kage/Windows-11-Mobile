@@ -13,6 +13,7 @@ class TermuxProotInstaller(
     ) {
         if (isProotReady()) {
             SharedLibraryMaterializer.materialize(paths.libDir)
+            ProotRuntimePreparer.prepare(paths)
             if (isProotReady()) {
                 ExecutablePreparer.sealForExecution(paths.proot)
                 ExecutablePreparer.sealForExecution(paths.prootLoader)
@@ -32,6 +33,7 @@ class TermuxProotInstaller(
         }
 
         SharedLibraryMaterializer.materialize(paths.libDir)
+        ProotRuntimePreparer.prepare(paths)
 
         require(paths.extractedProot.exists()) {
             "proot не знайдено після розпакування (${paths.extractedProot.absolutePath})"

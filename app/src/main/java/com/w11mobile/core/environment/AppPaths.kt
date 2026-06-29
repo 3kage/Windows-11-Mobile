@@ -9,10 +9,12 @@ class AppPaths(
     val baseDir: File = filesDir
     val cacheDir: File = File(filesDir, "cache").apply { mkdirs() }
     val execDir: File = File(codeCacheDir, "exec").apply { mkdirs() }
-    val termuxPrefix: File = File(filesDir, "termux/usr").apply { mkdirs() }
+    val termuxRoot: File = File(filesDir, "termux").apply { mkdirs() }
+    val termuxPrefix: File = File(termuxRoot, "usr").apply { mkdirs() }
     val binDir: File = File(termuxPrefix, "bin").apply { mkdirs() }
     val libexecDir: File = File(termuxPrefix, "libexec").apply { mkdirs() }
     val libDir: File = File(termuxPrefix, "lib").apply { mkdirs() }
+    val prootTmpDir: File = File(termuxPrefix, "tmp").apply { mkdirs() }
     val extractedProot: File = File(binDir, "proot")
     val proot: File = File(execDir, "proot")
     val prootLoader: File = File(execDir, "proot-loader")

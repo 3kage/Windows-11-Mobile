@@ -12,9 +12,9 @@ class PRootExecutor(
         command: String,
         extraBinds: List<String> = emptyList(),
     ): ShellExecutor.Result {
-        val busybox = prepareRuntime()
+        prepareRuntime()
         return shellExecutor.executeWithArgs(
-            args = buildProotInvocation(busybox, extraBinds, command),
+            args = buildProotInvocation(extraBinds, command),
             environment = buildEnvironment(),
         )
     }
@@ -24,53 +24,32 @@ class PRootExecutor(
         extraBinds: List<String> = emptyList(),
         onLine: (String) -> Unit,
     ): ShellExecutor.Result {
-        val busybox = prepareRuntime()
+        prepareRuntime()
         return shellExecutor.executeStreamingWithArgs(
-            args = buildProotInvocation(busybox, extraBinds, command),
+            args = buildProotInvocation(extraBinds, command),
             environment = buildEnvironment(),
             onLine = onLine,
         )
     }
 
-    private fun prepareRuntime(): File {
+    private fun prepareRuntime() {
         ProotRuntimePreparer.prepare(paths)
-        val busybox = GuestBusyboxStager.ensureReady(paths)
+        GuestBusyboxStager.ensureReady(paths)
         require(paths.prootNativeLib.exists() && paths.prootNativeLib.length() > 0L) {
             "libproot.so не знайдено в ${paths.prootNativeLib.absolutePath}. Перевстановіть APK."
         }
         val loader = prootInstaller.findProotLoader()?.absolutePath
             ?: error("libproot_loader.so не знайдено")
         require(File(loader).length() > 0L) { "libproot_loader.so пошкоджений" }
-        return busybox
     }
 
     private fun buildProotInvocation(
-        busybox: File,
         extraBinds: List<String>,
         command: String,
     ): List<String> {
-        val prootArgs = buildList {
-            addAll(buildBindArgs(busybox, extraBinds))
-            add("--link2symlink")
-            add("-0")
-            add("-r")
-            add(paths.rootfsDir.absolutePath)
-            add("-w")
-            add("/root")
-            add("/system/bin/linker64")
-            add("/exec/busybox")
-            add("sh")
-            add("-c")
-            add(GuestShell.wrap(paths, command))
-        }
-        return ShellExecutor.buildNativeProotInvocation(paths.prootNativeLib, prootArgs)
-    }
-
-    private fun buildBindArgs(busybox: File, extraBinds: List<String>): List<String> {
+        val busybox = GuestBusyboxStager.ensureReady(paths)
         val busyboxPath = busybox.absolutePath
-        return buildList {
-            add("-b")
-            add("/system:/system")
+        val guestBinds = buildList {
             add("-b")
             add("$busyboxPath:/exec/busybox")
             add("-b")
@@ -80,15 +59,18 @@ class PRootExecutor(
             add("-b")
             add("${paths.guestExecDir.absolutePath}:/exec/guest")
             add("-b")
-            add("/dev")
-            add("-b")
-            add("/proc")
-            add("-b")
-            add("/sys")
-            add("-b")
             add("${paths.imagesDir.absolutePath}:/images")
             addAll(extraBinds)
         }
+
+        val request = ShellExecutor.ProotLaunchRequest(
+            prootNativeLib = paths.prootNativeLib,
+            rootfsDir = paths.rootfsDir,
+            guestCommand = GuestShell.wrap(paths, command),
+            guestShell = ShellExecutor.GUEST_SHELL,
+            extraBindFlags = guestBinds,
+        )
+        return ShellExecutor.buildNativeProotInvocation(request)
     }
 
     private fun buildEnvironment(): Map<String, String> {
@@ -100,7 +82,6 @@ class PRootExecutor(
             prootLoaderPath = loader,
             ldLibraryPath = paths.libDir.absolutePath,
         ) + mapOf(
-            "PATH" to "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${paths.binDir.absolutePath}:/system/bin",
             "HOME" to "/root",
             "TMPDIR" to "/tmp",
         )

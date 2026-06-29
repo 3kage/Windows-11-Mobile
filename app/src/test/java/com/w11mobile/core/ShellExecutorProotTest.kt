@@ -20,24 +20,52 @@ class ShellExecutorProotTest {
             assertTrue(env["PROOT_TMPDIR"]!!.startsWith(cache.absolutePath))
             assertEquals(env["PROOT_TMPDIR"], env["PROOT_TMP_DIR"])
             assertEquals("/data/app/libproot_loader.so", env["PROOT_LOADER"])
+            assertEquals(ShellExecutor.LINUX_PATH, env["PATH"])
         } finally {
             cache.deleteRecursively()
         }
     }
 
     @Test
-    fun buildNativeProotInvocation_usesLinker64AndNativeLib() {
+    fun buildProotArguments_includesSystemBindsAndGuestShell() {
+        val rootfs = createTempDir("rootfs")
         val lib = File(createTempDir("native"), "libproot.so").apply { writeBytes(byteArrayOf(1)) }
         try {
+            val args = ShellExecutor.buildProotArguments(
+                ShellExecutor.ProotLaunchRequest(
+                    prootNativeLib = lib,
+                    rootfsDir = rootfs,
+                    guestCommand = "echo ok",
+                ),
+            )
+
+            assertTrue(args.containsAll(listOf("-b", "/system", "-b", "/dev", "-b", "/proc", "-b", "/sys")))
+            assertEquals("/bin/sh", args[args.lastIndexOf("-r") + 4])
+            assertEquals("echo ok", args.last())
+        } finally {
+            lib.parentFile?.deleteRecursively()
+            rootfs.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun buildNativeProotInvocation_usesLinker64AndNativeLib() {
+        val lib = File(createTempDir("native"), "libproot.so").apply { writeBytes(byteArrayOf(1)) }
+        val rootfs = createTempDir("rootfs")
+        try {
             val args = ShellExecutor.buildNativeProotInvocation(
-                lib,
-                listOf("--version"),
+                ShellExecutor.ProotLaunchRequest(
+                    prootNativeLib = lib,
+                    rootfsDir = rootfs,
+                    guestCommand = "true",
+                ),
             )
             assertEquals("/system/bin/linker64", args[0])
             assertEquals(lib.absolutePath, args[1])
-            assertEquals("--version", args[2])
+            assertEquals("/bin/sh", args[args.indexOf("/bin/sh")])
         } finally {
             lib.parentFile?.deleteRecursively()
+            rootfs.deleteRecursively()
         }
     }
 }

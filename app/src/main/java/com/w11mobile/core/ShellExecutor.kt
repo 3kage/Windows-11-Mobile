@@ -31,8 +31,25 @@ class ShellExecutor(
         }
     }
 
+    data class ProotLaunchRequest(
+        val prootNativeLib: File,
+        val rootfsDir: File,
+        val guestCommand: String,
+        val guestShell: String = GUEST_SHELL,
+        val extraBindFlags: List<String> = emptyList(),
+    )
+
     companion object {
         private const val LINKER64 = "/system/bin/linker64"
+        const val GUEST_SHELL = "/bin/sh"
+        const val LINUX_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/system/bin"
+
+        private val ANDROID_SYSTEM_BINDS = listOf(
+            "-b", "/system",
+            "-b", "/dev",
+            "-b", "/proc",
+            "-b", "/sys",
+        )
 
         /**
          * Required PRoot environment for Android 10+ / W^X and seccomp compatibility.
@@ -50,20 +67,36 @@ class ShellExecutor(
                 "PROOT_TMP_DIR" to tmpDir.absolutePath,
                 "PROOT_F2FS_WORKAROUND" to "1",
                 "LD_LIBRARY_PATH" to ldLibraryPath,
+                "PATH" to LINUX_PATH,
             )
         }
 
         /**
-         * Builds argv to execute [prootNativeLib] (libproot.so) via Android linker64.
+         * PRoot CLI arguments: system binds, guest rootfs, then [guestShell] as the final executable.
          */
-        fun buildNativeProotInvocation(
-            prootNativeLib: File,
-            prootArguments: List<String>,
-        ): List<String> = buildList {
-            add(LINKER64)
-            add(prootNativeLib.absolutePath)
-            addAll(prootArguments)
+        fun buildProotArguments(request: ProotLaunchRequest): List<String> = buildList {
+            addAll(ANDROID_SYSTEM_BINDS)
+            addAll(request.extraBindFlags)
+            add("--link2symlink")
+            add("-0")
+            add("-r")
+            add(request.rootfsDir.absolutePath)
+            add("-w")
+            add("/root")
+            add(request.guestShell)
+            add("-c")
+            add(request.guestCommand)
         }
+
+        /**
+         * Full host argv: linker64 + libproot.so + [buildProotArguments].
+         */
+        fun buildNativeProotInvocation(request: ProotLaunchRequest): List<String> =
+            buildList {
+                add(LINKER64)
+                add(request.prootNativeLib.absolutePath)
+                addAll(buildProotArguments(request))
+            }
     }
 
     suspend fun execute(
@@ -162,8 +195,12 @@ class ShellExecutor(
     ) {
         workingDirectory?.let { processBuilder.directory(it) }
         val mergedEnvironment = environment + extraEnvironment
+        val env = processBuilder.environment()
         if (mergedEnvironment.isNotEmpty()) {
-            processBuilder.environment().putAll(mergedEnvironment)
+            env.putAll(mergedEnvironment)
+        }
+        if (env["PATH"].isNullOrBlank()) {
+            env["PATH"] = LINUX_PATH
         }
         processBuilder.redirectErrorStream(false)
     }

@@ -16,6 +16,7 @@ class EnvironmentSetupOrchestrator(
 ) {
     private val paths = AppPaths(
         application.filesDir,
+        application.cacheDir,
         application.codeCacheDir,
         application.applicationInfo.nativeLibraryDir,
     )
@@ -111,7 +112,8 @@ class EnvironmentSetupOrchestrator(
     }
 
     fun isEnvironmentReady(): Boolean =
-        paths.proot.canExecute() &&
+        paths.prootNativeLib.exists() &&
+            paths.prootNativeLib.length() > 0L &&
             File(paths.rootfsDir, "bin/sh").exists() &&
             (            File(paths.cacheDir, "qemu_termux_installed.marker").exists() ||
                 File(paths.cacheDir, "qemu_aarch64_installed.marker").exists() ||
@@ -140,7 +142,7 @@ class EnvironmentSetupOrchestrator(
         prootInstaller.install { downloaded, total ->
             reportDownloadProgress(SetupStep.INSTALL_PROOT, downloaded, total)
         }
-        onLog("PRoot: ${paths.proot.absolutePath}\n")
+        onLog("PRoot: ${paths.prootNativeLib.absolutePath}\n")
         onLog("Loader: ${prootInstaller.findProotLoader()?.absolutePath}\n")
         onLog("Libs: ${paths.libDir.absolutePath}\n")
     }

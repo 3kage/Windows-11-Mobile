@@ -19,10 +19,10 @@ android {
 
     defaultConfig {
         applicationId = "com.w11mobile.windows11"
-        minSdk = 26
-        targetSdk = 34
-        versionCode = 17
-        versionName = "1.4.0"
+        minSdk = 24
+        targetSdk = 28
+        versionCode = 19
+        versionName = "1.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -109,6 +109,60 @@ dependencies {
 }
 
 val alpineBusyboxOutput = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libalpine_busybox.so")
+val prootNativeLibOutput = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libproot.so")
+val prootLoaderNativeLibOutput = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libproot_loader.so")
+
+tasks.register("prepareProotNativeLibs") {
+    val packagesUrl =
+        "https://packages.termux.dev/apt/termux-main/dists/stable/main/binary-aarch64/Packages"
+    outputs.files(prootNativeLibOutput, prootLoaderNativeLibOutput)
+
+    onlyIf {
+        !prootNativeLibOutput.asFile.exists() || prootNativeLibOutput.asFile.length() == 0L ||
+            !prootLoaderNativeLibOutput.asFile.exists() || prootLoaderNativeLibOutput.asFile.length() == 0L
+    }
+
+    doLast {
+        val workDir = temporaryDir.resolve("termux-proot").apply { mkdirs() }
+        val packagesFile = workDir.resolve("Packages")
+        URI(packagesUrl).toURL().openStream().use { input ->
+            packagesFile.outputStream().use { output -> input.copyTo(output) }
+        }
+
+        val packagesText = packagesFile.readText()
+        val debPath = packagesText.split("\n\n")
+            .first { it.startsWith("Package: proot\n") }
+            .lines()
+            .first { it.startsWith("Filename: ") }
+            .removePrefix("Filename: ")
+            .trim()
+        val debUrl = "https://packages.termux.dev/apt/termux-main/$debPath"
+        val debFile = workDir.resolve("proot.deb")
+        URI(debUrl).toURL().openStream().use { input ->
+            debFile.outputStream().use { output -> input.copyTo(output) }
+        }
+
+        val extractDir = workDir.resolve("extract").apply { mkdirs() }
+        providers.exec {
+            workingDir = workDir
+            commandLine("bash", "-lc", """
+                set -euo pipefail
+                cd '${extractDir.absolutePath}'
+                ar x '${debFile.absolutePath}' data.tar.xz
+                tar -xJf data.tar.xz \
+                  ./data/data/com.termux/files/usr/bin/proot \
+                  ./data/data/com.termux/files/usr/libexec/proot/loader
+            """.trimIndent())
+        }.result.get()
+
+        val prootBin = extractDir.resolve("data/data/com.termux/files/usr/bin/proot")
+        val loaderBin = extractDir.resolve("data/data/com.termux/files/usr/libexec/proot/loader")
+
+        prootNativeLibOutput.asFile.parentFile.mkdirs()
+        prootBin.copyTo(prootNativeLibOutput.asFile, overwrite = true)
+        loaderBin.copyTo(prootLoaderNativeLibOutput.asFile, overwrite = true)
+    }
+}
 
 tasks.register("prepareAlpineBusybox") {
     val archiveUrl =
@@ -139,5 +193,5 @@ tasks.register("prepareAlpineBusybox") {
 }
 
 tasks.named("preBuild") {
-    dependsOn("prepareAlpineBusybox")
+    dependsOn("prepareAlpineBusybox", "prepareProotNativeLibs")
 }

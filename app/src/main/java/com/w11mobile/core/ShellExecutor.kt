@@ -7,7 +7,7 @@ import java.io.File
 
 /**
  * Executes shell commands in user-space via [ProcessBuilder].
- * Intended for PRoot/Termux-style environments where no root access is required.
+ * PRoot is launched as a native library ([libproot.so]) through [linker64], Winlator-style.
  */
 class ShellExecutor(
     private val workingDirectory: File? = null,
@@ -28,6 +28,41 @@ class ShellExecutor(
                 if (isNotEmpty()) append('\n')
                 append(stderr.trimEnd())
             }
+        }
+    }
+
+    companion object {
+        private const val LINKER64 = "/system/bin/linker64"
+
+        /**
+         * Required PRoot environment for Android 10+ / W^X and seccomp compatibility.
+         */
+        fun buildProotEnvironment(
+            appCacheDir: File,
+            prootLoaderPath: String,
+            ldLibraryPath: String,
+        ): Map<String, String> {
+            val tmpDir = File(appCacheDir, "proot-tmp").apply { mkdirs() }
+            return mapOf(
+                "PROOT_LOADER" to prootLoaderPath,
+                "PROOT_NO_SECCOMP" to "1",
+                "PROOT_TMPDIR" to tmpDir.absolutePath,
+                "PROOT_TMP_DIR" to tmpDir.absolutePath,
+                "PROOT_F2FS_WORKAROUND" to "1",
+                "LD_LIBRARY_PATH" to ldLibraryPath,
+            )
+        }
+
+        /**
+         * Builds argv to execute [prootNativeLib] (libproot.so) via Android linker64.
+         */
+        fun buildNativeProotInvocation(
+            prootNativeLib: File,
+            prootArguments: List<String>,
+        ): List<String> = buildList {
+            add(LINKER64)
+            add(prootNativeLib.absolutePath)
+            addAll(prootArguments)
         }
     }
 

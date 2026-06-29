@@ -12,9 +12,9 @@ class PRootExecutor(
         command: String,
         extraBinds: List<String> = emptyList(),
     ): ShellExecutor.Result {
-        prepareRuntime()
+        val busybox = prepareRuntime()
         return shellExecutor.executeWithArgs(
-            args = buildProotArgs(extraBinds, command),
+            args = buildProotInvocation(busybox, extraBinds, command),
             environment = buildEnvironment(),
         )
     }
@@ -24,50 +24,59 @@ class PRootExecutor(
         extraBinds: List<String> = emptyList(),
         onLine: (String) -> Unit,
     ): ShellExecutor.Result {
-        prepareRuntime()
+        val busybox = prepareRuntime()
         return shellExecutor.executeStreamingWithArgs(
-            args = buildProotArgs(extraBinds, command),
+            args = buildProotInvocation(busybox, extraBinds, command),
             environment = buildEnvironment(),
             onLine = onLine,
         )
     }
 
-    private fun prepareRuntime() {
+    private fun prepareRuntime(): File {
         ProotRuntimePreparer.prepare(paths)
-        require(paths.guestBusybox.exists() && paths.guestBusybox.length() > 0L) {
-            "Вбудований busybox (libalpine_busybox.so) відсутній. Перевстановіть APK."
+        val busybox = GuestBusyboxStager.ensureReady(paths)
+        require(paths.prootNativeLib.exists() && paths.prootNativeLib.length() > 0L) {
+            "libproot.so не знайдено в ${paths.prootNativeLib.absolutePath}. Перевстановіть APK."
         }
         val loader = prootInstaller.findProotLoader()?.absolutePath
-            ?: error("proot-loader не знайдено")
-        require(paths.proot.canExecute()) { "proot не готовий до запуску" }
-        require(File(loader).length() > 0L) { "proot-loader пошкоджений" }
+            ?: error("libproot_loader.so не знайдено")
+        require(File(loader).length() > 0L) { "libproot_loader.so пошкоджений" }
+        return busybox
     }
 
-    private fun buildProotArgs(extraBinds: List<String>, command: String): List<String> =
-        buildList {
-            add("/system/bin/linker64")
-            add(paths.proot.absolutePath)
-            addAll(buildBindArgs(extraBinds))
+    private fun buildProotInvocation(
+        busybox: File,
+        extraBinds: List<String>,
+        command: String,
+    ): List<String> {
+        val prootArgs = buildList {
+            addAll(buildBindArgs(busybox, extraBinds))
             add("--link2symlink")
             add("-0")
             add("-r")
             add(paths.rootfsDir.absolutePath)
             add("-w")
             add("/root")
-            add("/bin/sh")
+            add("/system/bin/linker64")
+            add("/exec/busybox")
+            add("sh")
             add("-c")
             add(GuestShell.wrap(paths, command))
         }
+        return ShellExecutor.buildNativeProotInvocation(paths.prootNativeLib, prootArgs)
+    }
 
-    private fun buildBindArgs(extraBinds: List<String>): List<String> {
-        val busybox = paths.guestBusybox.absolutePath
+    private fun buildBindArgs(busybox: File, extraBinds: List<String>): List<String> {
+        val busyboxPath = busybox.absolutePath
         return buildList {
             add("-b")
             add("/system:/system")
             add("-b")
-            add("$busybox:/bin/busybox")
+            add("$busyboxPath:/exec/busybox")
             add("-b")
-            add("$busybox:/bin/sh")
+            add("$busyboxPath:/bin/busybox")
+            add("-b")
+            add("$busyboxPath:/bin/sh")
             add("-b")
             add("${paths.guestExecDir.absolutePath}:/exec/guest")
             add("-b")
@@ -84,14 +93,13 @@ class PRootExecutor(
 
     private fun buildEnvironment(): Map<String, String> {
         val loader = prootInstaller.findProotLoader()?.absolutePath
-            ?: error("proot-loader не знайдено")
+            ?: error("libproot_loader.so не знайдено")
 
-        return mapOf(
-            "PROOT_LOADER" to loader,
-            "PROOT_NO_SECCOMP" to "1",
-            "PROOT_TMP_DIR" to paths.prootTmpDir.absolutePath,
-            "PROOT_F2FS_WORKAROUND" to "1",
-            "LD_LIBRARY_PATH" to paths.libDir.absolutePath,
+        return ShellExecutor.buildProotEnvironment(
+            appCacheDir = paths.appCacheDir,
+            prootLoaderPath = loader,
+            ldLibraryPath = paths.libDir.absolutePath,
+        ) + mapOf(
             "PATH" to "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${paths.binDir.absolutePath}:/system/bin",
             "HOME" to "/root",
             "TMPDIR" to "/tmp",

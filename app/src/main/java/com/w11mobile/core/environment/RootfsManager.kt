@@ -9,16 +9,32 @@ class RootfsManager(
     suspend fun installAlpineRootfs(
         onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit = { _, _ -> },
     ) {
-        if (File(paths.rootfsDir, "bin/sh").exists()) return
+        if (isRootfsReady()) {
+            configureRootfs()
+            return
+        }
+
+        paths.rootfsDir.deleteRecursively()
+        paths.rootfsDir.mkdirs()
 
         val archive = File(paths.cacheDir, "alpine-minirootfs.tar.gz")
         downloadManager.download(EnvironmentUrls.ALPINE_ROOTFS_AARCH64, archive, onProgress)
         ArchiveExtractor.extractTarGz(archive, paths.rootfsDir)
         configureRootfs()
         archive.delete()
+
+        require(isRootfsReady()) {
+            "Alpine rootfs пошкоджений після розпакування (${paths.rootfsDir.absolutePath})"
+        }
+    }
+
+    private fun isRootfsReady(): Boolean {
+        val shell = File(paths.rootfsDir, "bin/sh")
+        return shell.exists() && shell.isFile && shell.length() > 0L
     }
 
     fun configureRootfs() {
+        ProotRuntimePreparer.prepare(paths)
         writeFile(File(paths.rootfsDir, "etc/resolv.conf"), "nameserver 8.8.8.8\nnameserver 8.8.4.4\n")
         writeFile(
             File(paths.rootfsDir, "etc/apk/repositories"),

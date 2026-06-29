@@ -17,11 +17,11 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.w11mobile"
+        applicationId = "com.w11mobile.windows11"
         minSdk = 26
         targetSdk = 34
-        versionCode = 6
-        versionName = "1.3.2"
+        versionCode = 7
+        versionName = "1.3.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

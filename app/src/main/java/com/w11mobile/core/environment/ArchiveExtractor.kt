@@ -1,6 +1,5 @@
 package com.w11mobile.core.environment
 
-import android.system.Os
 import org.apache.commons.compress.archivers.ar.ArArchiveInputStream
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
@@ -115,49 +114,6 @@ object ArchiveExtractor {
         root: File,
         pendingSymlinks: List<Pair<File, String>>,
     ) {
-        var remaining = pendingSymlinks
-        repeat(8) {
-            if (remaining.isEmpty()) return
-            val unresolved = mutableListOf<Pair<File, String>>()
-            remaining.forEach { (target, linkName) ->
-                if (!materializeSymlink(root, target, linkName)) {
-                    unresolved += target to linkName
-                }
-            }
-            remaining = unresolved
-        }
-
-        remaining.forEach { (target, _) ->
-            if (target.exists() && target.length() == 0L) {
-                target.delete()
-            }
-        }
+        RootfsSymlinkMaterializer.materialize(root, pendingSymlinks)
     }
-
-    private fun materializeSymlink(root: File, target: File, linkName: String): Boolean {
-        if (target.exists() && target.length() > 0L) return true
-
-        if (target.exists()) target.delete()
-
-        runCatching {
-            Os.symlink(linkName, target.absolutePath)
-        }.onSuccess {
-            return target.exists()
-        }
-
-        val resolved = resolveSymlinkTarget(root, target, linkName)
-        if (resolved.isFile && resolved.length() > 0L) {
-            resolved.copyTo(target, overwrite = true)
-            return target.length() > 0L
-        }
-
-        return false
-    }
-
-    private fun resolveSymlinkTarget(root: File, target: File, linkName: String): File =
-        if (linkName.startsWith("/")) {
-            File(root, linkName.removePrefix("/"))
-        } else {
-            File(target.parentFile, linkName)
-        }
 }

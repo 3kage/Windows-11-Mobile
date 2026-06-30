@@ -5,7 +5,7 @@ import java.io.File
 
 object QemuNativeLauncher {
     const val LINKER64 = "/system/bin/linker64"
-    const val VNC_DISPLAY = "vnc=127.0.0.1:0,websocket=off"
+    const val VNC_BIND = "127.0.0.1:0"
     const val VNC_HOST = "127.0.0.1"
     /** QEMU VNC display :0 → TCP 5900 */
     const val VNC_PORT = 5900
@@ -97,7 +97,7 @@ object QemuNativeLauncher {
     private fun MutableList<String>.addUsbTabletAndVncDisplay() {
         add("-device")
         add("usb-tablet,bus=usbctrl.0")
-        add("-display")
-        add(VNC_DISPLAY)
+        add("-vnc")
+        add(VNC_BIND)
     }
 }

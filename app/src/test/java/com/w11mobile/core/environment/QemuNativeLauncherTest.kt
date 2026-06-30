@@ -40,7 +40,9 @@ class QemuNativeLauncherTest {
         assertTrue(args.contains("file=${disk.absolutePath},if=none,format=qcow2,id=windisk"))
         assertTrue(args.contains("virtio-blk-pci,drive=windisk,bootindex=2,romfile=${File(romDir, "efi-virtio.rom").absolutePath}"))
         assertTrue(args.contains("usb-tablet,bus=usbctrl.0"))
-        assertTrue(args.contains(QemuNativeLauncher.VNC_DISPLAY))
+        assertTrue(args.contains("-vnc"))
+        assertTrue(args.contains(QemuNativeLauncher.VNC_BIND))
+        assertFalse(args.contains("-display"))
         assertFalse(args.contains("-cdrom"))
         assertFalse(args.contains("none"))
     }
@@ -55,7 +57,9 @@ class QemuNativeLauncherTest {
 
         assertTrue(args.contains("qemu-xhci,id=usbctrl"))
         assertTrue(args.contains("usb-tablet,bus=usbctrl.0"))
-        assertTrue(args.contains(QemuNativeLauncher.VNC_DISPLAY))
+        assertTrue(args.contains("-vnc"))
+        assertTrue(args.contains(QemuNativeLauncher.VNC_BIND))
+        assertFalse(args.contains("-display"))
         assertFalse(args.any { it == "none" })
     }
 

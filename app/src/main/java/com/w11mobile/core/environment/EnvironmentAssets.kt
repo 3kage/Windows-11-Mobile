@@ -4,7 +4,7 @@ import java.io.File
 
 object EnvironmentAssets {
     /** Increment only when bundled rootfs/Termux/QEMU payloads change on disk. */
-    const val ASSETS_VERSION = 1
+    const val ASSETS_VERSION = 2
 }
 
 object EnvironmentReadiness {
@@ -50,5 +50,7 @@ object EnvironmentReadiness {
             paths.uefiFirmware.exists() &&
             paths.uefiFirmware.length() > 0L &&
             paths.qemuVirtioRom.exists() &&
-            paths.qemuVirtioRom.length() > 0L
+            paths.qemuVirtioRom.length() > 0L &&
+            paths.qemuEnUsKeymap.exists() &&
+            paths.qemuEnUsKeymap.length() > 0L
 }

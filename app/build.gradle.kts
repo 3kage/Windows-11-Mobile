@@ -21,8 +21,8 @@ android {
         applicationId = "com.w11mobile.windows11"
         minSdk = 24
         targetSdk = 28
-        versionCode = 31
-        versionName = "1.7.2"
+        versionCode = 32
+        versionName = "1.7.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

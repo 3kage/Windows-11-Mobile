@@ -21,8 +21,8 @@ android {
         applicationId = "com.w11mobile.windows11"
         minSdk = 24
         targetSdk = 28
-        versionCode = 23
-        versionName = "1.6.1"
+        versionCode = 24
+        versionName = "1.6.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -114,6 +114,7 @@ val prootLoaderNativeLibOutput = layout.projectDirectory.file("src/main/jniLibs/
 val qemuNativeLibOutput = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libqemu.so")
 val qemuImgNativeLibOutput = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libqemu_img.so")
 val uefiFirmwareAssetOutput = layout.projectDirectory.file("src/main/assets/firmware/QEMU_EFI.fd")
+val qemuVirtioRomAssetOutput = layout.projectDirectory.file("src/main/assets/qemu/efi-virtio.rom")
 
 tasks.register("prepareProotNativeLibs") {
     val packagesUrl =
@@ -224,6 +225,52 @@ tasks.register("prepareQemuNativeLibs") {
     }
 }
 
+tasks.register("prepareQemuRoms") {
+    val packagesUrl =
+        "https://packages.termux.dev/apt/termux-main/dists/stable/main/binary-aarch64/Packages"
+    outputs.file(qemuVirtioRomAssetOutput)
+
+    onlyIf {
+        !qemuVirtioRomAssetOutput.asFile.exists() || qemuVirtioRomAssetOutput.asFile.length() == 0L
+    }
+
+    doLast {
+        val workDir = temporaryDir.resolve("termux-qemu-roms").apply { mkdirs() }
+        val packagesFile = workDir.resolve("Packages")
+        URI(packagesUrl).toURL().openStream().use { input ->
+            packagesFile.outputStream().use { output -> input.copyTo(output) }
+        }
+
+        val debPath = packagesFile.readText().split("\n\n")
+            .first { it.startsWith("Package: qemu-common\n") }
+            .lines()
+            .first { it.startsWith("Filename: ") }
+            .removePrefix("Filename: ")
+            .trim()
+        val debUrl = "https://packages.termux.dev/apt/termux-main/$debPath"
+        val debFile = workDir.resolve("qemu-common.deb")
+        URI(debUrl).toURL().openStream().use { input ->
+            debFile.outputStream().use { output -> input.copyTo(output) }
+        }
+
+        val extractDir = workDir.resolve("extract").apply { mkdirs() }
+        providers.exec {
+            workingDir = workDir
+            commandLine("bash", "-lc", """
+                set -euo pipefail
+                cd '${extractDir.absolutePath}'
+                ar x '${debFile.absolutePath}' data.tar.xz
+                tar -xJf data.tar.xz \
+                  ./data/data/com.termux/files/usr/share/qemu/efi-virtio.rom
+            """.trimIndent())
+        }.result.get()
+
+        val rom = extractDir.resolve("data/data/com.termux/files/usr/share/qemu/efi-virtio.rom")
+        qemuVirtioRomAssetOutput.asFile.parentFile.mkdirs()
+        rom.copyTo(qemuVirtioRomAssetOutput.asFile, overwrite = true)
+    }
+}
+
 tasks.register("prepareUefiFirmware") {
     val debUrl =
         "http://ftp.debian.org/debian/pool/main/e/edk2/qemu-efi-aarch64_2022.11-6+deb12u2_all.deb"
@@ -290,6 +337,7 @@ tasks.named("preBuild") {
         "prepareAlpineBusybox",
         "prepareProotNativeLibs",
         "prepareQemuNativeLibs",
+        "prepareQemuRoms",
         "prepareUefiFirmware",
     )
 }

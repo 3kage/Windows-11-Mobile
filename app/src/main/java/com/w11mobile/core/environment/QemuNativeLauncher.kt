@@ -11,6 +11,7 @@ object QemuNativeLauncher {
         "HOME" to paths.baseDir.absolutePath,
         "TMPDIR" to paths.appCacheDir.absolutePath,
         "PATH" to ShellExecutor.LINUX_PATH,
+        "QEMU_FIRMWARE_PATH" to paths.qemuShareDir.absolutePath,
     )
 
     fun buildInvocation(qemuLib: File, args: List<String>): List<String> =

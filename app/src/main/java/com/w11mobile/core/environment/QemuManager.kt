@@ -1,6 +1,7 @@
 package com.w11mobile.core.environment
 
 import android.content.Context
+import com.w11mobile.BuildConfig
 import com.w11mobile.core.ShellExecutor
 import java.io.File
 
@@ -11,7 +12,8 @@ class QemuManager(
     private val guestBinaryInstaller: TermuxGuestBinaryInstaller,
 ) {
     companion object {
-        const val QEMU_ASSET_PATH = "firmware/QEMU_EFI.fd"
+        const val QEMU_UEFI_ASSET = "firmware/QEMU_EFI.fd"
+        const val QEMU_VIRTIO_ROM_ASSET = "qemu/efi-virtio.rom"
         private const val MARKER_NAME = "qemu_native_installed.marker"
     }
 
@@ -24,8 +26,9 @@ class QemuManager(
             "libqemu.so не знайдено в ${paths.qemuNativeLib.absolutePath}. Перевстановіть APK."
         }
         onLog("QEMU: ${paths.qemuNativeLib.absolutePath}\n")
+        onLog("Версія додатка: ${BuildConfig.VERSION_NAME}\n")
 
-        if (!markerFile.exists() || !paths.libDir.list().orEmpty().any { it.endsWith(".so") }) {
+        if (needsLibraryRefresh()) {
             onLog("Завантаження залежностей QEMU (Termux Bionic libs)...\n")
             guestBinaryInstaller.installPackageLibraries(
                 packages = listOf(
@@ -42,15 +45,13 @@ class QemuManager(
         ensureUefiFirmware(onLog)
         ensureQemuRomFiles(onLog)
 
-        markerFile.writeText("ok")
+        markerFile.writeText(BuildConfig.VERSION_NAME)
         return verifyInstallation(onLog)
     }
 
     suspend fun verifyInstallation(onLog: (String) -> Unit): ShellExecutor.Result {
-        require(paths.uefiFirmware.exists() && paths.uefiFirmware.length() > 0L) {
-            "UEFI firmware не знайдено: ${paths.uefiFirmware.absolutePath}"
-        }
-        ensureQemuRomFiles()
+        ensureUefiFirmware(onLog)
+        ensureQemuRomFiles(onLog)
 
         val result = shellExecutor.executeWithArgs(
             args = QemuNativeLauncher.buildInvocation(
@@ -62,8 +63,8 @@ class QemuManager(
         onLog(buildString {
             append(result.combinedOutput())
             append("\nUEFI: ${paths.uefiFirmware.absolutePath} (${paths.uefiFirmware.length()} bytes)\n")
-            append("QEMU ROM dir: ${paths.qemuShareDir.absolutePath}\n")
-            append("efi-virtio.rom: ${paths.qemuVirtioRom.exists()}\n")
+            append("QEMU ROM dir (-L): ${paths.qemuShareDir.absolutePath}\n")
+            append("efi-virtio.rom: ${paths.qemuVirtioRom.length()} bytes\n")
             append("ISO dir: ${paths.imagesDir.absolutePath}\n")
         })
         return result
@@ -105,8 +106,10 @@ class QemuManager(
         require(paths.qemuNativeLib.exists() && paths.qemuNativeLib.length() > 0L) {
             "libqemu.so не готовий. Завершіть крок встановлення QEMU."
         }
+
+        onLine(">>> Версія: ${BuildConfig.VERSION_NAME}\n")
         ensureUefiFirmware(onLine)
-        ensureQemuRomFiles()
+        ensureQemuRomFiles(onLine)
 
         if (config.bootMode == WindowsBootMode.ISO) {
             val diskResult = createInstallDiskIfNeeded { line -> onLine("$line\n") }
@@ -157,14 +160,31 @@ class QemuManager(
     }
 
     private fun ensureQemuRomFiles(onLog: ((String) -> Unit)? = null) {
+        paths.qemuShareDir.mkdirs()
+
+        if (!paths.qemuVirtioRom.exists() || paths.qemuVirtioRom.length() == 0L) {
+            copyAsset(QEMU_VIRTIO_ROM_ASSET, paths.qemuVirtioRom)
+        }
+
+        val termuxRom = File(paths.termuxQemuShareDir, "efi-virtio.rom")
+        if ((!paths.qemuVirtioRom.exists() || paths.qemuVirtioRom.length() == 0L) &&
+            termuxRom.exists() && termuxRom.length() > 0L
+        ) {
+            termuxRom.copyTo(paths.qemuVirtioRom, overwrite = true)
+            onLog?.invoke("QEMU ROM copied from Termux: ${termuxRom.absolutePath}\n")
+        }
+
         require(paths.qemuVirtioRom.exists() && paths.qemuVirtioRom.length() > 0L) {
             buildString {
-                append("QEMU ROM efi-virtio.rom не знайдено в ${paths.qemuShareDir.absolutePath}. ")
-                append("Повторіть крок встановлення QEMU.")
-                append("\nЗміст каталогу: ${paths.qemuShareDir.list()?.joinToString() ?: "(порожньо)"}")
+                append("QEMU ROM efi-virtio.rom не знайдено. ")
+                append("Очікуваний шлях: ${paths.qemuVirtioRom.absolutePath}. ")
+                append("Перевстановіть APK v${BuildConfig.VERSION_NAME} і повторіть ініціалізацію.")
+                append("\nTermux ROM dir: ${paths.termuxQemuShareDir.list()?.joinToString() ?: "(порожньо)"}")
             }
         }
-        onLog?.invoke("QEMU ROM: ${paths.qemuVirtioRom.absolutePath}\n")
+
+        onLog?.invoke("QEMU ROM (-L): ${paths.qemuShareDir.absolutePath}\n")
+        onLog?.invoke("efi-virtio.rom: ${paths.qemuVirtioRom.length()} bytes\n")
     }
 
     private fun ensureUefiFirmware(onLog: (String) -> Unit) {
@@ -173,12 +193,23 @@ class QemuManager(
             return
         }
 
-        context.assets.open(QEMU_ASSET_PATH).use { input ->
-            paths.uefiFirmware.outputStream().use { output ->
+        copyAsset(QEMU_UEFI_ASSET, paths.uefiFirmware)
+        onLog("UEFI firmware: ${paths.uefiFirmware.absolutePath}\n")
+    }
+
+    private fun copyAsset(assetPath: String, target: File) {
+        target.parentFile?.mkdirs()
+        context.assets.open(assetPath).use { input ->
+            target.outputStream().use { output ->
                 input.copyTo(output)
             }
         }
-        onLog("UEFI firmware: ${paths.uefiFirmware.absolutePath}\n")
+    }
+
+    private fun needsLibraryRefresh(): Boolean {
+        if (!markerFile.exists()) return true
+        if (markerFile.readText().trim() != BuildConfig.VERSION_NAME) return true
+        return !paths.libDir.list().orEmpty().any { it.endsWith(".so") }
     }
 
     private fun clearLegacyMarkers() {
@@ -198,5 +229,6 @@ class QemuManager(
             paths.uefiFirmware.length() > 0L &&
             paths.qemuVirtioRom.exists() &&
             paths.qemuVirtioRom.length() > 0L &&
-            markerFile.exists()
+            markerFile.exists() &&
+            markerFile.readText().trim() == BuildConfig.VERSION_NAME
 }

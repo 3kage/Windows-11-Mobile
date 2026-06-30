@@ -62,6 +62,7 @@ class QemuNativeLauncherTest {
         val env = QemuNativeLauncher.buildEnvironment(paths)
 
         assertEquals(paths.libDir.absolutePath, env["LD_LIBRARY_PATH"])
+        assertEquals(paths.qemuShareDir.absolutePath, env["QEMU_FIRMWARE_PATH"])
         assertEquals(ShellExecutor.LINUX_PATH, env["PATH"])
     }
 }

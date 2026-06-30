@@ -355,7 +355,7 @@ class EnvironmentSetupOrchestrator(
             """
             echo "=== Перевірка ==="
             ls -lh /exec/guest
-            ${GuestShell.termuxBinary(paths, "qemu-system-aarch64-headless", "--version")}
+            ${GuestShell.termuxBinary(paths, QemuManager.QEMU_SYSTEM_AARCH64, "--version")}
             ls -lh /usr/share/edk2-aarch64/QEMU_EFI.fd
             ls -lh /images || true
             """.trimIndent(),

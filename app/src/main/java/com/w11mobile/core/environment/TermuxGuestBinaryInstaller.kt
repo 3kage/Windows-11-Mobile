@@ -1,17 +1,26 @@
 package com.w11mobile.core.environment
 
+import android.util.Log
 import java.io.File
 
 class TermuxGuestBinaryInstaller(
     private val paths: AppPaths,
     private val downloadManager: DownloadManager,
 ) {
+    companion object {
+        private const val TAG = "TermuxGuestBinaryInstaller"
+    }
+
     private val packageResolver = TermuxPackageResolver(paths.cacheDir, downloadManager)
+
+    private val searchRoots: List<File>
+        get() = listOf(paths.binDir, paths.termuxPrefix, paths.termuxRoot)
 
     suspend fun installExecutables(
         packages: List<String>,
-        executables: Map<String, String>,
+        executables: List<TermuxExecutableSpec>,
         onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit = { _, _ -> },
+        onLog: (String) -> Unit = {},
     ) {
         val packageSet = packages.flatMap { packageResolver.resolveInstallOrder(it) }.distinct()
         for (packageName in packageSet) {
@@ -24,22 +33,30 @@ class TermuxGuestBinaryInstaller(
 
         SharedLibraryMaterializer.materialize(paths.libDir)
 
-        for ((sourceName, guestName) in executables) {
-            val source = findBinary(sourceName)
-                ?: error("Termux binary $sourceName не знайдено після розпакування")
-            val target = File(paths.guestExecDir, guestName)
+        for (spec in executables) {
+            val source = TermuxBinaryLocator.findBinary(searchRoots, spec.searchNames)
+            if (source == null) {
+                val diagnostic = TermuxBinaryLocator.describeSearchRoots(searchRoots)
+                val message = buildString {
+                    append("Termux binary ")
+                    append(spec.searchNames.joinToString(" / "))
+                    append(" не знайдено після розпакування.\n")
+                    append("Структура каталогів:\n")
+                    append(diagnostic)
+                }
+                Log.e(TAG, message)
+                onLog("$message\n")
+                error("Termux binary ${spec.searchNames.first()} не знайдено після розпакування")
+            }
+
+            source.setExecutable(true, false)
+
+            val target = File(paths.guestExecDir, spec.guestName)
             ExecutablePreparer.installExecutable(source, target)
+            onLog("QEMU: ${source.absolutePath} → ${target.absolutePath}\n")
         }
     }
 
     fun isInstalled(required: Collection<String>): Boolean =
         required.all { File(paths.guestExecDir, it).canExecute() }
-
-    private fun findBinary(name: String): File? {
-        val candidates = listOf(
-            File(paths.binDir, name),
-            File(paths.termuxPrefix, "bin/$name"),
-        )
-        return candidates.firstOrNull { it.exists() && it.length() > 0L }
-    }
 }

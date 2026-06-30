@@ -8,12 +8,18 @@ class QemuManager(
     private val prootExecutor: PRootExecutor,
     private val guestBinaryInstaller: TermuxGuestBinaryInstaller,
 ) {
+    companion object {
+        const val QEMU_SYSTEM_AARCH64 = "qemu-system-aarch64"
+        const val QEMU_SYSTEM_X86_64 = "qemu-system-x86_64"
+        const val QEMU_IMG = "qemu-img"
+    }
+
     private val markerFile = File(paths.cacheDir, "qemu_termux_installed.marker")
 
     private val guestBinaries = listOf(
-        "qemu-system-aarch64-headless",
-        "qemu-system-x86-64-headless",
-        "qemu-img",
+        QEMU_SYSTEM_AARCH64,
+        QEMU_SYSTEM_X86_64,
+        QEMU_IMG,
     )
 
     suspend fun install(onLog: (String) -> Unit): ShellExecutor.Result {
@@ -37,11 +43,21 @@ class QemuManager(
                 "qemu-system-aarch64-headless",
                 "qemu-system-x86-64-headless",
             ),
-            executables = mapOf(
-                "qemu-system-aarch64-headless" to "qemu-system-aarch64-headless",
-                "qemu-system-x86-64-headless" to "qemu-system-x86-64-headless",
-                "qemu-img" to "qemu-img",
+            executables = listOf(
+                TermuxExecutableSpec(
+                    searchNames = listOf(QEMU_SYSTEM_AARCH64, "qemu-system-aarch64-headless"),
+                    guestName = QEMU_SYSTEM_AARCH64,
+                ),
+                TermuxExecutableSpec(
+                    searchNames = listOf(QEMU_SYSTEM_X86_64, "qemu-system-x86-64-headless", "qemu-system-x86-64"),
+                    guestName = QEMU_SYSTEM_X86_64,
+                ),
+                TermuxExecutableSpec(
+                    searchNames = listOf(QEMU_IMG),
+                    guestName = QEMU_IMG,
+                ),
             ),
+            onLog = onLog,
         )
 
         onLog("Встановлення UEFI firmware (Alpine apk)...")
@@ -60,8 +76,8 @@ class QemuManager(
     suspend fun verifyInstallation(onLog: (String) -> Unit): ShellExecutor.Result {
         val result = prootExecutor.execInRootfs(
             """
-            ${GuestShell.termuxBinary(paths, "qemu-system-aarch64-headless", "--version")}
-            ${GuestShell.termuxBinary(paths, "qemu-system-x86-64-headless", "--version")}
+            ${GuestShell.termuxBinary(paths, QEMU_SYSTEM_AARCH64, "--version")}
+            ${GuestShell.termuxBinary(paths, QEMU_SYSTEM_X86_64, "--version")}
             ls -lh /usr/share/edk2-aarch64/QEMU_EFI.fd
             """.trimIndent(),
         )
@@ -79,7 +95,7 @@ class QemuManager(
         return prootExecutor.execInRootfs(
             GuestShell.termuxBinary(
                 paths,
-                "qemu-img",
+                QEMU_IMG,
                 "create -f qcow2 /images/${paths.windowsDisk.name} 48G",
             ),
         )
@@ -117,12 +133,11 @@ class QemuManager(
     }
 
     private fun buildArm64Command(config: WindowsImageConfig): String {
-        val qemu = GuestShell.termuxBinary(
+        return GuestShell.termuxBinary(
             paths,
-            "qemu-system-aarch64-headless",
+            QEMU_SYSTEM_AARCH64,
             buildArm64Arguments(config),
         )
-        return qemu
     }
 
     private fun buildArm64Arguments(config: WindowsImageConfig): String {
@@ -168,7 +183,7 @@ class QemuManager(
 
         return GuestShell.termuxBinary(
             paths,
-            "qemu-system-x86-64-headless",
+            QEMU_SYSTEM_X86_64,
             """
             -machine q35 \
             -cpu qemu64 \

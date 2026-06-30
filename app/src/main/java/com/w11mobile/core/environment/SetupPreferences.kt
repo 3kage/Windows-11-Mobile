@@ -35,6 +35,10 @@ class SetupPreferences(context: Context) {
         get() = prefs.getBoolean(KEY_SETUP_COMPLETE, false)
         set(value) = prefs.edit().putBoolean(KEY_SETUP_COMPLETE, value).apply()
 
+    var lastAssetsVersion: Int
+        get() = prefs.getInt(KEY_LAST_ASSETS_VERSION, 0)
+        set(value) = prefs.edit().putInt(KEY_LAST_ASSETS_VERSION, value).apply()
+
     companion object {
         private const val PREFS_NAME = "environment_setup"
         private const val KEY_WINDOWS_IMAGE_URL = "windows_image_url"
@@ -43,5 +47,6 @@ class SetupPreferences(context: Context) {
         private const val KEY_LOCAL_IMAGE_NAME = "local_image_name"
         private const val KEY_WINDOWS_IMAGE_ARCH = "windows_image_arch"
         private const val KEY_SETUP_COMPLETE = "setup_complete"
+        private const val KEY_LAST_ASSETS_VERSION = "last_assets_version"
     }
 }

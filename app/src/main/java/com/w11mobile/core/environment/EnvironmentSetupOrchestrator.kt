@@ -33,7 +33,7 @@ class EnvironmentSetupOrchestrator(
     private val rootfsManager = RootfsManager(paths, downloadManager)
     private val prootExecutor = PRootExecutor(paths, prootInstaller, shellExecutor)
     private val guestBinaryInstaller = TermuxGuestBinaryInstaller(paths, downloadManager)
-    private val qemuManager = QemuManager(application, paths, shellExecutor, guestBinaryInstaller)
+    private val qemuManager = QemuManager(application, paths, shellExecutor, guestBinaryInstaller, preferences)
     private val windowsImageManager = WindowsImageManager(paths, downloadManager)
     private val localImageImporter = LocalImageImporter(application, paths)
 
@@ -51,11 +51,24 @@ class EnvironmentSetupOrchestrator(
         preferences.windowsImageArch = imageArch
 
         try {
+            migrateLegacyPersistedAssetsIfNeeded()
+
             runStep(SetupStep.VERIFY_DEVICE) { verifyDevice() }
-            runStep(SetupStep.INSTALL_PROOT) { installProot() }
-            runStep(SetupStep.INSTALL_ROOTFS) { installRootfs() }
-            runStep(SetupStep.CONFIGURE_ROOTFS) { configureRootfs() }
-            runStep(SetupStep.INSTALL_QEMU) { installQemu() }
+
+            if (EnvironmentReadiness.isPersistedEnvironmentReady(preferences, paths)) {
+                skipDeployedAssetsSteps()
+            } else {
+                runStep(SetupStep.INSTALL_PROOT) { installProot() }
+                runStep(SetupStep.INSTALL_ROOTFS) { installRootfs() }
+                runStep(SetupStep.CONFIGURE_ROOTFS) { configureRootfs() }
+            }
+
+            if (qemuManager.isReady()) {
+                skipQemuInstallStep()
+            } else {
+                runStep(SetupStep.INSTALL_QEMU) { installQemu() }
+            }
+
             runStep(SetupStep.DOWNLOAD_WINDOWS_IMAGE) {
                 prepareWindowsImage(
                     imageSource = imageSource,
@@ -67,6 +80,7 @@ class EnvironmentSetupOrchestrator(
             }
             runStep(SetupStep.VERIFY_ENVIRONMENT) { verifyEnvironment() }
 
+            preferences.lastAssetsVersion = EnvironmentAssets.ASSETS_VERSION
             onStepChanged(SetupStep.COMPLETE)
             onProgressChanged(100, false)
             preferences.setupComplete = true
@@ -112,9 +126,10 @@ class EnvironmentSetupOrchestrator(
     }
 
     fun isEnvironmentReady(): Boolean =
-        paths.prootNativeLib.exists() &&
+        EnvironmentReadiness.isPersistedEnvironmentReady(preferences, paths) &&
+            paths.prootNativeLib.exists() &&
             paths.prootNativeLib.length() > 0L &&
-            File(paths.rootfsDir, "bin/sh").exists() &&
+            prootInstaller.isProotReady() &&
             qemuManager.isReady()
 
     fun canLaunchWindows(): Boolean =
@@ -134,6 +149,42 @@ class EnvironmentSetupOrchestrator(
     private suspend fun verifyDevice() {
         logCommand("uname", "-a")
         logCommand("id")
+    }
+
+    private fun migrateLegacyPersistedAssetsIfNeeded() {
+        if (EnvironmentReadiness.isAssetsVersionCurrent(preferences)) {
+            return
+        }
+        if (!EnvironmentReadiness.hasRootfs(paths) ||
+            !EnvironmentReadiness.hasTermuxLibraries(paths) ||
+            !preferences.setupComplete
+        ) {
+            return
+        }
+
+        onLog(
+            "\n>>> Знайдено розгорнуте середовище з попередньої версії APK — " +
+                "прив'язуємо до assets v${EnvironmentAssets.ASSETS_VERSION} без перекопіювання.\n",
+        )
+        preferences.lastAssetsVersion = EnvironmentAssets.ASSETS_VERSION
+    }
+
+    private fun skipDeployedAssetsSteps() {
+        onLog(
+            "\n>>> Середовище вже розгорнуто (assets v${EnvironmentAssets.ASSETS_VERSION}) — " +
+                "пропускаємо PRoot/rootfs/Termux libs.\n",
+        )
+        val progressAfterConfigure = SetupStep.progressBefore(SetupStep.INSTALL_QEMU)
+        onStepChanged(SetupStep.CONFIGURE_ROOTFS)
+        onProgressChanged(progressAfterConfigure, false)
+    }
+
+    private fun skipQemuInstallStep() {
+        onLog("\n=== ${SetupStep.INSTALL_QEMU.labelUk} ===\nQEMU вже встановлено.\n")
+        val progressAfterQemu =
+            SetupStep.progressBefore(SetupStep.INSTALL_QEMU) + SetupStep.INSTALL_QEMU.weight
+        onStepChanged(SetupStep.INSTALL_QEMU)
+        onProgressChanged(progressAfterQemu.coerceAtMost(100), false)
     }
 
     private suspend fun installProot() {

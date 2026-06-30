@@ -10,14 +10,12 @@ class QemuManager(
     private val paths: AppPaths,
     private val shellExecutor: ShellExecutor,
     private val guestBinaryInstaller: TermuxGuestBinaryInstaller,
+    private val preferences: SetupPreferences,
 ) {
     companion object {
         const val QEMU_UEFI_ASSET = "firmware/QEMU_EFI.fd"
         const val QEMU_VIRTIO_ROM_ASSET = "qemu/efi-virtio.rom"
-        private const val MARKER_NAME = "qemu_native_installed.marker"
     }
-
-    private val markerFile = File(paths.cacheDir, MARKER_NAME)
 
     suspend fun install(onLog: (String) -> Unit): ShellExecutor.Result {
         clearLegacyMarkers()
@@ -26,7 +24,7 @@ class QemuManager(
             "libqemu.so не знайдено в ${paths.qemuNativeLib.absolutePath}. Перевстановіть APK."
         }
         onLog("QEMU: ${paths.qemuNativeLib.absolutePath}\n")
-        onLog("Версія додатка: ${BuildConfig.VERSION_NAME}\n")
+        onLog("Assets version: ${EnvironmentAssets.ASSETS_VERSION}\n")
 
         if (needsLibraryRefresh()) {
             onLog("Завантаження залежностей QEMU (Termux Bionic libs)...\n")
@@ -45,7 +43,6 @@ class QemuManager(
         ensureUefiFirmware(onLog)
         ensureQemuRomFiles(onLog)
 
-        markerFile.writeText(BuildConfig.VERSION_NAME)
         return verifyInstallation(onLog)
     }
 
@@ -107,7 +104,7 @@ class QemuManager(
             "libqemu.so не готовий. Завершіть крок встановлення QEMU."
         }
 
-        onLine(">>> Версія: ${BuildConfig.VERSION_NAME}\n")
+        onLine(">>> APK ${BuildConfig.VERSION_NAME} | assets v${EnvironmentAssets.ASSETS_VERSION}\n")
         ensureUefiFirmware(onLine)
         ensureQemuRomFiles(onLine)
 
@@ -178,7 +175,7 @@ class QemuManager(
             buildString {
                 append("QEMU ROM efi-virtio.rom не знайдено. ")
                 append("Очікуваний шлях: ${paths.qemuVirtioRom.absolutePath}. ")
-                append("Перевстановіть APK v${BuildConfig.VERSION_NAME} і повторіть ініціалізацію.")
+                append("Повторіть ініціалізацію або збільште ASSETS_VERSION після оновлення payload.")
                 append("\nTermux ROM dir: ${paths.termuxQemuShareDir.list()?.joinToString() ?: "(порожньо)"}")
             }
         }
@@ -207,13 +204,15 @@ class QemuManager(
     }
 
     private fun needsLibraryRefresh(): Boolean {
-        if (!markerFile.exists()) return true
-        if (markerFile.readText().trim() != BuildConfig.VERSION_NAME) return true
-        return !paths.libDir.list().orEmpty().any { it.endsWith(".so") }
+        if (!EnvironmentReadiness.isAssetsVersionCurrent(preferences)) {
+            return true
+        }
+        return !EnvironmentReadiness.hasTermuxLibraries(paths)
     }
 
     private fun clearLegacyMarkers() {
         listOf(
+            "qemu_native_installed.marker",
             "qemu_termux_installed.marker",
             "qemu_aarch64_installed.marker",
             "qemu_installed.marker",
@@ -222,13 +221,5 @@ class QemuManager(
         }
     }
 
-    fun isReady(): Boolean =
-        paths.qemuNativeLib.exists() &&
-            paths.qemuNativeLib.length() > 0L &&
-            paths.uefiFirmware.exists() &&
-            paths.uefiFirmware.length() > 0L &&
-            paths.qemuVirtioRom.exists() &&
-            paths.qemuVirtioRom.length() > 0L &&
-            markerFile.exists() &&
-            markerFile.readText().trim() == BuildConfig.VERSION_NAME
+    fun isReady(): Boolean = EnvironmentReadiness.isQemuRuntimeReady(paths)
 }

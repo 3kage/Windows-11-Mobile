@@ -32,6 +32,8 @@ class AppPaths(
     /** Termux extract path (fallback source for ROM files). */
     val termuxQemuShareDir: File = File(termuxPrefix, "share/qemu")
     val qemuVirtioRom: File = File(qemuShareDir, "efi-virtio.rom")
+    val qemuKeymapsDir: File = File(qemuShareDir, "keymaps")
+    val qemuEnUsKeymap: File = File(qemuKeymapsDir, "en-us")
     val extractedProot: File = File(binDir, "proot")
     val rootfsDir: File = File(filesDir, "rootfs").apply { mkdirs() }
     val imagesDir: File = File(filesDir, "images").apply { mkdirs() }

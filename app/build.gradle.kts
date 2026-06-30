@@ -21,8 +21,8 @@ android {
         applicationId = "com.w11mobile.windows11"
         minSdk = 24
         targetSdk = 28
-        versionCode = 29
-        versionName = "1.7.0"
+        versionCode = 30
+        versionName = "1.7.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -115,6 +115,7 @@ val qemuNativeLibOutput = layout.projectDirectory.file("src/main/jniLibs/arm64-v
 val qemuImgNativeLibOutput = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libqemu_img.so")
 val uefiFirmwareAssetOutput = layout.projectDirectory.file("src/main/assets/firmware/QEMU_EFI.fd")
 val qemuVirtioRomAssetOutput = layout.projectDirectory.file("src/main/assets/qemu/efi-virtio.rom")
+val qemuKeymapsAssetDir = layout.projectDirectory.dir("src/main/assets/qemu/keymaps")
 
 tasks.register("prepareProotNativeLibs") {
     val packagesUrl =
@@ -271,6 +272,63 @@ tasks.register("prepareQemuRoms") {
     }
 }
 
+tasks.register("prepareQemuKeymaps") {
+    val packagesUrl =
+        "https://packages.termux.dev/apt/termux-main/dists/stable/main/binary-aarch64/Packages"
+    outputs.dir(qemuKeymapsAssetDir)
+
+    onlyIf {
+        val keymapsDir = qemuKeymapsAssetDir.asFile
+        !File(keymapsDir, "en-us").exists() || File(keymapsDir, "en-us").length() == 0L
+    }
+
+    doLast {
+        val workDir = temporaryDir.resolve("termux-qemu-keymaps").apply { mkdirs() }
+        val packagesFile = workDir.resolve("Packages")
+        URI(packagesUrl).toURL().openStream().use { input ->
+            packagesFile.outputStream().use { output -> input.copyTo(output) }
+        }
+
+        val debPath = packagesFile.readText().split("\n\n")
+            .first { it.startsWith("Package: qemu-common\n") }
+            .lines()
+            .first { it.startsWith("Filename: ") }
+            .removePrefix("Filename: ")
+            .trim()
+        val debUrl = "https://packages.termux.dev/apt/termux-main/$debPath"
+        val debFile = workDir.resolve("qemu-common.deb")
+        URI(debUrl).toURL().openStream().use { input ->
+            debFile.outputStream().use { output -> input.copyTo(output) }
+        }
+
+        val extractDir = workDir.resolve("extract").apply { mkdirs() }
+        providers.exec {
+            workingDir = workDir
+            commandLine("bash", "-lc", """
+                set -euo pipefail
+                cd '${extractDir.absolutePath}'
+                ar x '${debFile.absolutePath}' data.tar.xz
+                tar -xJf data.tar.xz \
+                  ./data/data/com.termux/files/usr/share/qemu/keymaps
+            """.trimIndent())
+        }.result.get()
+
+        val sourceKeymapsDir =
+            extractDir.resolve("data/data/com.termux/files/usr/share/qemu/keymaps")
+        val targetKeymapsDir = qemuKeymapsAssetDir.asFile.apply { mkdirs() }
+        sourceKeymapsDir.walkTopDown().forEach { source ->
+            val relativePath = source.relativeTo(sourceKeymapsDir).path
+            val target = if (relativePath.isEmpty()) targetKeymapsDir else File(targetKeymapsDir, relativePath)
+            if (source.isDirectory) {
+                target.mkdirs()
+            } else {
+                target.parentFile?.mkdirs()
+                source.copyTo(target, overwrite = true)
+            }
+        }
+    }
+}
+
 tasks.register("prepareUefiFirmware") {
     val debUrl =
         "http://ftp.debian.org/debian/pool/main/e/edk2/qemu-efi-aarch64_2022.11-6+deb12u2_all.deb"
@@ -338,6 +396,7 @@ tasks.named("preBuild") {
         "prepareProotNativeLibs",
         "prepareQemuNativeLibs",
         "prepareQemuRoms",
+        "prepareQemuKeymaps",
         "prepareUefiFirmware",
     )
 }

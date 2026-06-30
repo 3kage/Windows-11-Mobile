@@ -39,6 +39,16 @@ class SetupPreferences(context: Context) {
         get() = prefs.getInt(KEY_LAST_ASSETS_VERSION, 0)
         set(value) = prefs.edit().putInt(KEY_LAST_ASSETS_VERSION, value).apply()
 
+    /** Atomically persist environment readiness (survives process kill before apply()). */
+    fun markEnvironmentReadyCommitted(): Boolean =
+        prefs.edit()
+            .putBoolean(KEY_SETUP_COMPLETE, true)
+            .putInt(KEY_LAST_ASSETS_VERSION, EnvironmentAssets.ASSETS_VERSION)
+            .commit()
+
+    fun isEnvironmentReadyFlagSet(): Boolean =
+        setupComplete && lastAssetsVersion == EnvironmentAssets.ASSETS_VERSION
+
     companion object {
         private const val PREFS_NAME = "environment_setup"
         private const val KEY_WINDOWS_IMAGE_URL = "windows_image_url"

@@ -17,6 +17,11 @@ class QemuManager(
         const val QEMU_VIRTIO_ROM_ASSET = "qemu/efi-virtio.rom"
     }
 
+    fun ensureRuntimeAssets(onLog: ((String) -> Unit)? = null) {
+        ensureUefiFirmware(onLog ?: {})
+        ensureQemuRomFiles(onLog)
+    }
+
     suspend fun install(onLog: (String) -> Unit): ShellExecutor.Result {
         clearLegacyMarkers()
 
@@ -203,12 +208,8 @@ class QemuManager(
         }
     }
 
-    private fun needsLibraryRefresh(): Boolean {
-        if (!EnvironmentReadiness.isAssetsVersionCurrent(preferences)) {
-            return true
-        }
-        return !EnvironmentReadiness.hasTermuxLibraries(paths)
-    }
+    private fun needsLibraryRefresh(): Boolean =
+        !EnvironmentReadiness.hasTermuxLibraries(paths)
 
     private fun clearLegacyMarkers() {
         listOf(

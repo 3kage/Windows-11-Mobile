@@ -34,7 +34,8 @@ class QemuNativeLauncherTest {
 
         assertEquals(romDir.absolutePath, args[args.indexOf("-L") + 1])
         assertTrue(args.contains("qemu-xhci,id=usbctrl"))
-        assertTrue(args.contains("file=${iso.absolutePath},if=none,id=winiso,media=cdrom"))
+        assertTrue(args.contains("file=${iso.absolutePath},if=none,id=winiso,format=raw"))
+        assertFalse(args.any { it.contains("media=cdrom") })
         assertTrue(args.contains("usb-storage,bus=usbctrl.0,drive=winiso,bootindex=1"))
         assertTrue(args.contains("file=${disk.absolutePath},if=none,format=qcow2,id=windisk"))
         assertTrue(args.contains("virtio-blk-pci,drive=windisk,bootindex=2,romfile=${File(romDir, "efi-virtio.rom").absolutePath}"))

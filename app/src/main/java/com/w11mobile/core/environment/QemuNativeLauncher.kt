@@ -41,7 +41,7 @@ object QemuNativeLauncher {
             add("-device")
             add("qemu-xhci,id=usbctrl")
             add("-drive")
-            add("file=${isoFile.absolutePath},if=none,id=winiso,media=cdrom")
+            add("file=${isoFile.absolutePath},if=none,id=winiso,format=raw")
             add("-device")
             add("usb-storage,bus=usbctrl.0,drive=winiso,bootindex=1")
             if (installDisk != null && installDisk.exists()) {

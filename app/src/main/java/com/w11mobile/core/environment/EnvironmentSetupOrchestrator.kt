@@ -83,7 +83,7 @@ class EnvironmentSetupOrchestrator(
             preferences.lastAssetsVersion = EnvironmentAssets.ASSETS_VERSION
             onStepChanged(SetupStep.COMPLETE)
             onProgressChanged(100, false)
-            preferences.setupComplete = true
+            commitEnvironmentReady()
             onLog("\n>>> Середовище Windows 11 готове до запуску.\n")
         } catch (error: Exception) {
             onStepChanged(SetupStep.ERROR)
@@ -93,8 +93,11 @@ class EnvironmentSetupOrchestrator(
     }
 
     suspend fun launchWindows() = withContext(Dispatchers.IO) {
-        require(canLaunchWindows()) {
+        require(refreshEnvironmentReadinessFromDisk()) {
             "Спочатку завершіть ініціалізацію та завантажте образ Windows."
+        }
+        require(paths.hasBootableImage()) {
+            "Образ Windows не знайдено. Імпортуйте ISO або QCOW2."
         }
         qemuManager.launchWindows(
             config = paths.readImageConfig() ?: defaultImageConfig(),
@@ -125,15 +128,36 @@ class EnvironmentSetupOrchestrator(
         }
     }
 
-    fun isEnvironmentReady(): Boolean =
-        EnvironmentReadiness.isPersistedEnvironmentReady(preferences, paths) &&
-            paths.prootNativeLib.exists() &&
-            paths.prootNativeLib.length() > 0L &&
-            prootInstaller.isProotReady() &&
-            qemuManager.isReady()
+    fun isEnvironmentReady(): Boolean = refreshEnvironmentReadinessFromDisk()
 
     fun canLaunchWindows(): Boolean =
         isEnvironmentReady() && paths.hasBootableImage()
+
+    /**
+     * Reconcile SharedPreferences with files already on disk.
+     * Never triggers full rootfs/Termux redeploy — only copies small QEMU assets if missing.
+     */
+    fun refreshEnvironmentReadinessFromDisk(): Boolean {
+        migrateLegacyPersistedAssetsIfNeeded()
+        qemuManager.ensureRuntimeAssets()
+
+        val runtimeReady =
+            EnvironmentReadiness.hasRootfs(paths) &&
+                EnvironmentReadiness.hasTermuxLibraries(paths) &&
+                paths.prootNativeLib.exists() &&
+                paths.prootNativeLib.length() > 0L &&
+                prootInstaller.isProotReady() &&
+                qemuManager.isReady()
+
+        if (runtimeReady && !preferences.isEnvironmentReadyFlagSet()) {
+            commitEnvironmentReady()
+            onLog(">>> Стан готовності збережено (assets v${EnvironmentAssets.ASSETS_VERSION}).\n")
+        }
+
+        return runtimeReady && preferences.isEnvironmentReadyFlagSet()
+    }
+
+    fun ensureReadyForLaunch(): Boolean = refreshEnvironmentReadinessFromDisk()
 
     private suspend fun runStep(step: SetupStep, block: suspend () -> Unit) {
         onStepChanged(step)
@@ -166,7 +190,13 @@ class EnvironmentSetupOrchestrator(
             "\n>>> Знайдено розгорнуте середовище з попередньої версії APK — " +
                 "прив'язуємо до assets v${EnvironmentAssets.ASSETS_VERSION} без перекопіювання.\n",
         )
-        preferences.lastAssetsVersion = EnvironmentAssets.ASSETS_VERSION
+        commitEnvironmentReady()
+    }
+
+    private fun commitEnvironmentReady() {
+        if (!preferences.markEnvironmentReadyCommitted()) {
+            error("Не вдалося зберегти стан готовності середовища в SharedPreferences")
+        }
     }
 
     private fun skipDeployedAssetsSteps() {

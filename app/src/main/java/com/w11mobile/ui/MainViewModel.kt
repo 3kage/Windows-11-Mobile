@@ -37,7 +37,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             localImageUri = preferences.localImageUri,
             localImageName = preferences.localImageName,
             windowsImageArch = preferences.windowsImageArch,
-            environmentReady = preferences.setupComplete || orchestrator.isEnvironmentReady(),
+            environmentReady = orchestrator.isEnvironmentReady(),
             canLaunchWindows = orchestrator.canLaunchWindows(),
         ).also { uiStateStore.set(it) },
     )
@@ -127,7 +127,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             updateState { copy(isRunning = true, errorMessage = null, isIndeterminate = true) }
             try {
-                if (orchestrator.isEnvironmentReady()) {
+                if (orchestrator.refreshEnvironmentReadinessFromDisk()) {
                     orchestrator.importLocalImageOnly(uri, state.localImageName, state.windowsImageArch)
                 } else {
                     appendLog(">>> Середовище ще не готове — запускаємо повну ініціалізацію...\n")
@@ -154,6 +154,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             updateState { copy(isRunning = true, errorMessage = null) }
             appendLog("\n>>> Запуск Windows 11...\n")
             try {
+                if (!orchestrator.refreshEnvironmentReadinessFromDisk()) {
+                    error("Середовище не готове. Завершіть ініціалізацію один раз — повторне розпакування не потрібне.")
+                }
+                if (!orchestrator.canLaunchWindows()) {
+                    error("Образ Windows не знайдено. Імпортуйте ISO або QCOW2.")
+                }
                 orchestrator.launchWindows()
             } catch (error: Exception) {
                 appendLog("\n[ПОМИЛКА] ${error.message}\n")

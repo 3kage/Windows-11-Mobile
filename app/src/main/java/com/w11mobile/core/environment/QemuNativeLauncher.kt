@@ -5,6 +5,7 @@ import java.io.File
 
 object QemuNativeLauncher {
     const val LINKER64 = "/system/bin/linker64"
+    private const val VIRTIO_ROM = "efi-virtio.rom"
 
     fun buildEnvironment(paths: AppPaths): Map<String, String> = mapOf(
         "LD_LIBRARY_PATH" to paths.libDir.absolutePath,
@@ -22,59 +23,69 @@ object QemuNativeLauncher {
         isoFile: File,
         qemuShareDir: File,
         installDisk: File? = null,
-    ): List<String> = buildList {
-        add("-L")
-        add(qemuShareDir.absolutePath)
-        add("-machine")
-        add("virt")
-        add("-cpu")
-        add("max")
-        add("-smp")
-        add("4")
-        add("-m")
-        add("4096")
-        add("-bios")
-        add(uefiFirmware.absolutePath)
-        add("-cdrom")
-        add(isoFile.absolutePath)
-        if (installDisk != null && installDisk.exists()) {
-            add("-drive")
-            add("if=none,file=${installDisk.absolutePath},format=qcow2,id=windisk")
+    ): List<String> {
+        val virtioRom = File(qemuShareDir, VIRTIO_ROM).absolutePath
+        return buildList {
+            add("-L")
+            add(qemuShareDir.absolutePath)
+            add("-machine")
+            add("virt")
+            add("-cpu")
+            add("max")
+            add("-smp")
+            add("4")
+            add("-m")
+            add("4096")
+            add("-bios")
+            add(uefiFirmware.absolutePath)
             add("-device")
-            add("virtio-blk-device,drive=windisk,bootindex=2")
+            add("qemu-xhci,id=usbctrl")
+            add("-drive")
+            add("file=${isoFile.absolutePath},if=none,id=winiso,media=cdrom")
+            add("-device")
+            add("usb-storage,bus=usbctrl.0,drive=winiso,bootindex=1")
+            if (installDisk != null && installDisk.exists()) {
+                add("-drive")
+                add("file=${installDisk.absolutePath},if=none,format=qcow2,id=windisk")
+                add("-device")
+                add("virtio-blk-pci,drive=windisk,bootindex=2,romfile=$virtioRom")
+            }
+            add("-display")
+            add("none")
+            add("-serial")
+            add("mon:stdio")
+            add("-no-reboot")
         }
-        add("-display")
-        add("none")
-        add("-serial")
-        add("mon:stdio")
-        add("-no-reboot")
     }
 
     fun buildArm64Qcow2Arguments(
         uefiFirmware: File,
         diskFile: File,
         qemuShareDir: File,
-    ): List<String> = buildList {
-        add("-L")
-        add(qemuShareDir.absolutePath)
-        add("-machine")
-        add("virt")
-        add("-cpu")
-        add("max")
-        add("-smp")
-        add("4")
-        add("-m")
-        add("4096")
-        add("-bios")
-        add(uefiFirmware.absolutePath)
-        add("-drive")
-        add("if=none,file=${diskFile.absolutePath},format=qcow2,id=windisk")
-        add("-device")
-        add("virtio-blk-device,drive=windisk,bootindex=1")
-        add("-display")
-        add("none")
-        add("-serial")
-        add("mon:stdio")
-        add("-no-reboot")
+    ): List<String> {
+        val virtioRom = File(qemuShareDir, VIRTIO_ROM).absolutePath
+        return buildList {
+            add("-L")
+            add(qemuShareDir.absolutePath)
+            add("-machine")
+            add("virt")
+            add("-cpu")
+            add("max")
+            add("-smp")
+            add("4")
+            add("-m")
+            add("4096")
+            add("-bios")
+            add(uefiFirmware.absolutePath)
+            add("-drive")
+            add("file=${diskFile.absolutePath},if=none,format=qcow2,id=windisk")
+            add("-device")
+            add("virtio-blk-pci,drive=windisk,bootindex=1,romfile=$virtioRom")
+            add("-display")
+            add("none")
+            add("-serial")
+            add("mon:stdio")
+            add("-no-reboot")
+        }
     }
 }

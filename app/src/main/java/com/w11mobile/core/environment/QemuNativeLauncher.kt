@@ -19,8 +19,11 @@ object QemuNativeLauncher {
     fun buildArm64IsoArguments(
         uefiFirmware: File,
         isoFile: File,
+        qemuShareDir: File,
         installDisk: File? = null,
     ): List<String> = buildList {
+        add("-L")
+        add(qemuShareDir.absolutePath)
         add("-machine")
         add("virt")
         add("-cpu")
@@ -35,7 +38,9 @@ object QemuNativeLauncher {
         add(isoFile.absolutePath)
         if (installDisk != null && installDisk.exists()) {
             add("-drive")
-            add("file=${installDisk.absolutePath},if=virtio,format=qcow2")
+            add("if=none,file=${installDisk.absolutePath},format=qcow2,id=windisk")
+            add("-device")
+            add("virtio-blk-device,drive=windisk,bootindex=2")
         }
         add("-display")
         add("none")
@@ -47,7 +52,10 @@ object QemuNativeLauncher {
     fun buildArm64Qcow2Arguments(
         uefiFirmware: File,
         diskFile: File,
+        qemuShareDir: File,
     ): List<String> = buildList {
+        add("-L")
+        add(qemuShareDir.absolutePath)
         add("-machine")
         add("virt")
         add("-cpu")
@@ -59,7 +67,9 @@ object QemuNativeLauncher {
         add("-bios")
         add(uefiFirmware.absolutePath)
         add("-drive")
-        add("file=${diskFile.absolutePath},if=virtio,format=qcow2")
+        add("if=none,file=${diskFile.absolutePath},format=qcow2,id=windisk")
+        add("-device")
+        add("virtio-blk-device,drive=windisk,bootindex=1")
         add("-display")
         add("none")
         add("-serial")

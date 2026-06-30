@@ -40,6 +40,7 @@ class QemuManager(
 
         onLog("Копіювання UEFI firmware (без Alpine apk)...\n")
         ensureUefiFirmware(onLog)
+        ensureQemuRomFiles(onLog)
 
         markerFile.writeText("ok")
         return verifyInstallation(onLog)
@@ -49,6 +50,7 @@ class QemuManager(
         require(paths.uefiFirmware.exists() && paths.uefiFirmware.length() > 0L) {
             "UEFI firmware не знайдено: ${paths.uefiFirmware.absolutePath}"
         }
+        ensureQemuRomFiles()
 
         val result = shellExecutor.executeWithArgs(
             args = QemuNativeLauncher.buildInvocation(
@@ -60,6 +62,8 @@ class QemuManager(
         onLog(buildString {
             append(result.combinedOutput())
             append("\nUEFI: ${paths.uefiFirmware.absolutePath} (${paths.uefiFirmware.length()} bytes)\n")
+            append("QEMU ROM dir: ${paths.qemuShareDir.absolutePath}\n")
+            append("efi-virtio.rom: ${paths.qemuVirtioRom.exists()}\n")
             append("ISO dir: ${paths.imagesDir.absolutePath}\n")
         })
         return result
@@ -102,6 +106,7 @@ class QemuManager(
             "libqemu.so не готовий. Завершіть крок встановлення QEMU."
         }
         ensureUefiFirmware(onLine)
+        ensureQemuRomFiles()
 
         if (config.bootMode == WindowsBootMode.ISO) {
             val diskResult = createInstallDiskIfNeeded { line -> onLine("$line\n") }
@@ -135,6 +140,7 @@ class QemuManager(
             QemuNativeLauncher.buildArm64IsoArguments(
                 uefiFirmware = paths.uefiFirmware,
                 isoFile = paths.windowsIso,
+                qemuShareDir = paths.qemuShareDir,
                 installDisk = paths.windowsDisk.takeIf { it.exists() },
             )
         }
@@ -145,8 +151,20 @@ class QemuManager(
             QemuNativeLauncher.buildArm64Qcow2Arguments(
                 uefiFirmware = paths.uefiFirmware,
                 diskFile = disk,
+                qemuShareDir = paths.qemuShareDir,
             )
         }
+    }
+
+    private fun ensureQemuRomFiles(onLog: ((String) -> Unit)? = null) {
+        require(paths.qemuVirtioRom.exists() && paths.qemuVirtioRom.length() > 0L) {
+            buildString {
+                append("QEMU ROM efi-virtio.rom не знайдено в ${paths.qemuShareDir.absolutePath}. ")
+                append("Повторіть крок встановлення QEMU.")
+                append("\nЗміст каталогу: ${paths.qemuShareDir.list()?.joinToString() ?: "(порожньо)"}")
+            }
+        }
+        onLog?.invoke("QEMU ROM: ${paths.qemuVirtioRom.absolutePath}\n")
     }
 
     private fun ensureUefiFirmware(onLog: (String) -> Unit) {
@@ -178,5 +196,7 @@ class QemuManager(
             paths.qemuNativeLib.length() > 0L &&
             paths.uefiFirmware.exists() &&
             paths.uefiFirmware.length() > 0L &&
+            paths.qemuVirtioRom.exists() &&
+            paths.qemuVirtioRom.length() > 0L &&
             markerFile.exists()
 }

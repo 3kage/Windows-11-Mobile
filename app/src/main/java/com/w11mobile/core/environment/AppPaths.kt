@@ -27,6 +27,8 @@ class AppPaths(
     val binDir: File = File(termuxPrefix, "bin").apply { mkdirs() }
     val libexecDir: File = File(termuxPrefix, "libexec").apply { mkdirs() }
     val libDir: File = File(termuxPrefix, "lib").apply { mkdirs() }
+    val qemuShareDir: File = File(termuxPrefix, "share/qemu").apply { mkdirs() }
+    val qemuVirtioRom: File = File(qemuShareDir, "efi-virtio.rom")
     val extractedProot: File = File(binDir, "proot")
     val rootfsDir: File = File(filesDir, "rootfs").apply { mkdirs() }
     val imagesDir: File = File(filesDir, "images").apply { mkdirs() }

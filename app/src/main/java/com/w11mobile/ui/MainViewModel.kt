@@ -11,13 +11,18 @@ import com.w11mobile.core.environment.ImageSource
 import com.w11mobile.core.environment.SetupPreferences
 import com.w11mobile.core.environment.SetupStep
 import com.w11mobile.core.environment.WindowsImageArch
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicReference
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val _uiState = MutableLiveData(SetupUiState())
+    val uiState: LiveData<SetupUiState> = _uiState
+
+    private val uiStateStore = AtomicReference(_uiState.value ?: SetupUiState())
     private val preferences = SetupPreferences(application)
-    private val uiStateStore = AtomicReference<SetupUiState>()
     private val orchestrator = EnvironmentSetupOrchestrator(
         application = application,
         preferences = preferences,
@@ -30,18 +35,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         onLog = { text -> appendLog(text) },
     )
 
-    private val _uiState = MutableLiveData(
-        SetupUiState(
-            imageSource = preferences.imageSource,
-            windowsImageUrl = preferences.windowsImageUrl,
-            localImageUri = preferences.localImageUri,
-            localImageName = preferences.localImageName,
-            windowsImageArch = preferences.windowsImageArch,
-            environmentReady = orchestrator.isEnvironmentReady(),
-            canLaunchWindows = orchestrator.canLaunchWindows(),
-        ).also { uiStateStore.set(it) },
-    )
-    val uiState: LiveData<SetupUiState> = _uiState
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            val initialState = loadInitialUiState()
+            uiStateStore.set(initialState)
+            _uiState.postValue(initialState)
+        }
+    }
 
     fun setImageSource(source: ImageSource) {
         preferences.imageSource = source
@@ -127,7 +127,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             updateState { copy(isRunning = true, errorMessage = null, isIndeterminate = true) }
             try {
-                if (orchestrator.refreshEnvironmentReadinessFromDisk()) {
+                if (withContext(Dispatchers.IO) { orchestrator.refreshEnvironmentReadinessFromDisk() }) {
                     orchestrator.importLocalImageOnly(uri, state.localImageName, state.windowsImageArch)
                 } else {
                     appendLog(">>> Середовище ще не готове — запускаємо повну ініціалізацію...\n")
@@ -154,10 +154,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             updateState { copy(isRunning = true, errorMessage = null) }
             appendLog("\n>>> Запуск Windows 11...\n")
             try {
-                if (!orchestrator.refreshEnvironmentReadinessFromDisk()) {
+                if (!withContext(Dispatchers.IO) { orchestrator.refreshEnvironmentReadinessFromDisk() }) {
                     error("Середовище не готове. Завершіть ініціалізацію один раз — повторне розпакування не потрібне.")
                 }
-                if (!orchestrator.canLaunchWindows()) {
+                if (!withContext(Dispatchers.IO) { orchestrator.canLaunchWindows() }) {
                     error("Образ Windows не знайдено. Імпортуйте ISO або QCOW2.")
                 }
                 orchestrator.launchWindows()
@@ -165,11 +165,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 appendLog("\n[ПОМИЛКА] ${error.message}\n")
                 updateState { copy(errorMessage = error.message) }
             } finally {
+                val flags = withContext(Dispatchers.IO) { readEnvironmentFlags() }
                 updateState {
                     copy(
                         isRunning = false,
-                        environmentReady = orchestrator.isEnvironmentReady(),
-                        canLaunchWindows = orchestrator.canLaunchWindows(),
+                        environmentReady = flags.first,
+                        canLaunchWindows = flags.second,
                     )
                 }
             }
@@ -180,17 +181,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         updateState { copy(terminalLog = "") }
     }
 
-    private fun refreshEnvironmentState(
+    private suspend fun loadInitialUiState(): SetupUiState = withContext(Dispatchers.IO) {
+        SetupUiState(
+            imageSource = preferences.imageSource,
+            windowsImageUrl = preferences.windowsImageUrl,
+            localImageUri = preferences.localImageUri,
+            localImageName = preferences.localImageName,
+            windowsImageArch = preferences.windowsImageArch,
+            environmentReady = orchestrator.isEnvironmentReady(),
+            canLaunchWindows = orchestrator.canLaunchWindows(),
+        )
+    }
+
+    private suspend fun refreshEnvironmentState(
         step: SetupStep,
         stepLabel: String,
         progress: Int,
         errorMessage: String? = null,
     ) {
+        val flags = withContext(Dispatchers.IO) { readEnvironmentFlags() }
         updateState {
             copy(
                 isRunning = false,
-                environmentReady = orchestrator.isEnvironmentReady(),
-                canLaunchWindows = orchestrator.canLaunchWindows(),
+                environmentReady = flags.first,
+                canLaunchWindows = flags.second,
                 step = step,
                 stepLabel = stepLabel,
                 progress = progress,
@@ -199,6 +213,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
     }
+
+    private fun readEnvironmentFlags(): Pair<Boolean, Boolean> =
+        orchestrator.isEnvironmentReady() to orchestrator.canLaunchWindows()
 
     private fun appendLog(text: String) {
         updateState { copy(terminalLog = terminalLog + text) }

@@ -1,9 +1,10 @@
 package com.w11mobile.ui
 
 import android.os.Bundle
+import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
-import com.w11mobile.core.environment.QemuMonitorClient
 import com.w11mobile.databinding.ActivityWindowsDisplayBinding
 import com.w11mobile.vnc.MinimalVncClient
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +17,7 @@ import kotlinx.coroutines.withContext
 class WindowsDisplayActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityWindowsDisplayBinding
+    private val viewModel: WindowsDisplayViewModel by viewModels()
     private var vncClient: MinimalVncClient? = null
     private var connectJob: Job? = null
 
@@ -24,17 +26,37 @@ class WindowsDisplayActivity : AppCompatActivity() {
         binding = ActivityWindowsDisplayBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        val showBootOverlay = intent.getBooleanExtra(EXTRA_SHOW_BOOT_OVERLAY, false)
+        viewModel.configure(showBootOverlay)
+
         binding.vncFrameView.onPointerEvent = { frameX, frameY, pressed ->
             vncClient?.sendPointer(frameX, frameY, pressed)
         }
 
+        binding.bootOverlay.setOnClickListener {
+            viewModel.sendAnyKeyToQemu()
+        }
+
         binding.btnSendAnyKey.setOnClickListener {
-            vncClient?.sendAnyKey()
-            QemuMonitorClient.sendKey()
+            viewModel.sendAnyKeyToQemu()
         }
 
         binding.btnCloseDisplay.setOnClickListener {
             finish()
+        }
+
+        viewModel.bootOverlayVisible.observe(this) { visible ->
+            binding.bootOverlay.isVisible = visible
+            binding.displayControls.isVisible = !visible
+        }
+
+        viewModel.monitorError.observe(this) { error ->
+            if (!error.isNullOrBlank()) {
+                binding.vncStatusText.text = getString(
+                    com.w11mobile.R.string.windows_display_monitor_error,
+                    error,
+                )
+            }
         }
 
         startVncConnection()
@@ -71,8 +93,10 @@ class WindowsDisplayActivity : AppCompatActivity() {
                                 override fun onFrame(bitmap: android.graphics.Bitmap) {
                                     runOnUiThread {
                                         binding.vncFrameView.updateFrame(bitmap)
-                                        binding.vncStatusText.text =
-                                            getString(com.w11mobile.R.string.windows_display_connected)
+                                        if (viewModel.bootOverlayVisible.value != true) {
+                                            binding.vncStatusText.text =
+                                                getString(com.w11mobile.R.string.windows_display_connected)
+                                        }
                                     }
                                 }
 
@@ -99,6 +123,8 @@ class WindowsDisplayActivity : AppCompatActivity() {
     }
 
     companion object {
+        const val EXTRA_SHOW_BOOT_OVERLAY = "show_boot_overlay"
+
         private const val MAX_CONNECT_ATTEMPTS = 45
         private const val RETRY_DELAY_MS = 1_000L
     }

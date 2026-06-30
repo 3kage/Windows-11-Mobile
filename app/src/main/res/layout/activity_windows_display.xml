@@ -11,7 +11,7 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:contentDescription="@string/windows_display_touch_hint"
-        app:layout_constraintBottom_toTopOf="@id/displayControls"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -31,6 +31,56 @@
         app:layout_constraintTop_toTopOf="parent"
         tools:text="VNC підключено 1280x720" />
 
+    <FrameLayout
+        android:id="@+id/bootOverlay"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#E6000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="visible">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="24dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="@string/windows_display_boot_overlay_title"
+                android:textAppearance="?attr/textAppearanceHeadlineSmall"
+                android:textColor="@android:color/white" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:text="@string/windows_display_boot_overlay_hint"
+                android:textAppearance="?attr/textAppearanceBodyLarge"
+                android:textColor="@android:color/white" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSendAnyKey"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:minHeight="56dp"
+                android:paddingHorizontal="24dp"
+                android:text="@string/windows_display_any_key"
+                app:cornerRadius="12dp" />
+        </LinearLayout>
+    </FrameLayout>
+
     <LinearLayout
         android:id="@+id/displayControls"
         android:layout_width="0dp"
@@ -38,9 +88,11 @@
         android:background="#CC111111"
         android:orientation="vertical"
         android:padding="12dp"
+        android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
+        app:layout_constraintStart_toStartOf="parent"
+        tools:visibility="visible">
 
         <TextView
             android:layout_width="match_parent"
@@ -50,18 +102,11 @@
             android:textColor="@android:color/white" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnSendAnyKey"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/windows_display_any_key"
-            app:cornerRadius="12dp" />
-
-        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnCloseDisplay"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:text="@string/windows_display_back_to_log"
             android:textColor="@android:color/white" />
     </LinearLayout>

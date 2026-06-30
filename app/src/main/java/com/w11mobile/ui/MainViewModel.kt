@@ -161,14 +161,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (!withContext(Dispatchers.IO) { orchestrator.canLaunchWindows() }) {
                     error("Образ Windows не знайдено. Імпортуйте ISO або QCOW2.")
                 }
+                val showBootOverlay = withContext(Dispatchers.IO) { orchestrator.isIsoBootMode() }
                 withContext(Dispatchers.Main) {
                     getApplication<Application>().startActivity(
                         Intent(getApplication(), WindowsDisplayActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            putExtra(WindowsDisplayActivity.EXTRA_SHOW_BOOT_OVERLAY, showBootOverlay)
                         },
                     )
                 }
-                appendLog(">>> Відкрито сенсорний екран Windows. Торкніться «Будь-яка клавіша» для завантаження ISO.\n")
+                if (showBootOverlay) {
+                    appendLog(">>> Відкрито сенсорний екран Windows. Торкніться «Будь-яка клавіша» для завантаження ISO.\n")
+                } else {
+                    appendLog(">>> Відкрито сенсорний екран Windows.\n")
+                }
                 orchestrator.launchWindows()
             } catch (error: Exception) {
                 appendLog("\n[ПОМИЛКА] ${error.message}\n")

@@ -133,6 +133,14 @@ class EnvironmentSetupOrchestrator(
     fun canLaunchWindows(): Boolean =
         isEnvironmentReady() && paths.hasBootableImage()
 
+    fun isIsoBootMode(): Boolean {
+        val config = paths.readImageConfig()
+        if (config != null) {
+            return config.bootMode == WindowsBootMode.ISO
+        }
+        return paths.windowsIso.exists()
+    }
+
     /**
      * Reconcile SharedPreferences with files already on disk.
      * Never triggers full rootfs/Termux redeploy — only copies small QEMU assets if missing.

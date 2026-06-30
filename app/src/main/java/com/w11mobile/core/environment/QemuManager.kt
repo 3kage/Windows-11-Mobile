@@ -1,71 +1,74 @@
 package com.w11mobile.core.environment
 
+import android.content.Context
+import com.w11mobile.BuildConfig
 import com.w11mobile.core.ShellExecutor
 import java.io.File
 
 class QemuManager(
+    private val context: Context,
     private val paths: AppPaths,
-    private val prootExecutor: PRootExecutor,
+    private val shellExecutor: ShellExecutor,
     private val guestBinaryInstaller: TermuxGuestBinaryInstaller,
+    private val preferences: SetupPreferences,
 ) {
-    private val markerFile = File(paths.cacheDir, "qemu_termux_installed.marker")
+    companion object {
+        const val QEMU_UEFI_ASSET = "firmware/QEMU_EFI.fd"
+        const val QEMU_VIRTIO_ROM_ASSET = "qemu/efi-virtio.rom"
+    }
 
-    private val guestBinaries = listOf(
-        "qemu-system-aarch64-headless",
-        "qemu-system-x86-64-headless",
-        "qemu-img",
-    )
+    fun ensureRuntimeAssets(onLog: ((String) -> Unit)? = null) {
+        ensureUefiFirmware(onLog ?: {})
+        ensureQemuRomFiles(onLog)
+    }
 
     suspend fun install(onLog: (String) -> Unit): ShellExecutor.Result {
-        val legacyMarker = File(paths.cacheDir, "qemu_aarch64_installed.marker")
-        if (legacyMarker.exists()) {
-            onLog("Оновлення QEMU до Termux/Android-сумісної збірки...")
-            legacyMarker.delete()
-            File(paths.cacheDir, "qemu_installed.marker").delete()
-            markerFile.delete()
+        clearLegacyMarkers()
+
+        require(paths.qemuNativeLib.exists() && paths.qemuNativeLib.length() > 0L) {
+            "libqemu.so не знайдено в ${paths.qemuNativeLib.absolutePath}. Перевстановіть APK."
+        }
+        onLog("QEMU: ${paths.qemuNativeLib.absolutePath}\n")
+        onLog("Assets version: ${EnvironmentAssets.ASSETS_VERSION}\n")
+
+        if (needsLibraryRefresh()) {
+            onLog("Завантаження залежностей QEMU (Termux Bionic libs)...\n")
+            guestBinaryInstaller.installPackageLibraries(
+                packages = listOf(
+                    "qemu-utils",
+                    "qemu-system-aarch64-headless",
+                ),
+                onLog = onLog,
+            )
+        } else {
+            onLog("Залежності QEMU вже завантажено.\n")
         }
 
-        if (markerFile.exists() && guestBinaryInstaller.isInstalled(guestBinaries)) {
-            onLog("QEMU вже встановлено.")
-            return verifyInstallation(onLog)
-        }
+        onLog("Копіювання UEFI firmware (без Alpine apk)...\n")
+        ensureUefiFirmware(onLog)
+        ensureQemuRomFiles(onLog)
 
-        onLog("Завантаження QEMU (Termux, Android/bionic)...")
-        guestBinaryInstaller.installExecutables(
-            packages = listOf(
-                "qemu-utils",
-                "qemu-system-aarch64-headless",
-                "qemu-system-x86-64-headless",
-            ),
-            executables = mapOf(
-                "qemu-system-aarch64-headless" to "qemu-system-aarch64-headless",
-                "qemu-system-x86-64-headless" to "qemu-system-x86-64-headless",
-                "qemu-img" to "qemu-img",
-            ),
-        )
-
-        onLog("Встановлення UEFI firmware (Alpine apk)...")
-        var result = prootExecutor.execInRootfs(
-            """
-            apk update
-            apk add --no-cache edk2-aarch64
-            """.trimIndent(),
-        )
-        if (!result.success) return result
-
-        markerFile.writeText("ok")
         return verifyInstallation(onLog)
     }
 
     suspend fun verifyInstallation(onLog: (String) -> Unit): ShellExecutor.Result {
-        val result = prootExecutor.execInRootfs(
-            """
-            ${GuestShell.termuxBinary(paths, "qemu-system-aarch64-headless", "--version")}
-            ${GuestShell.termuxBinary(paths, "qemu-system-x86-64-headless", "--version")}
-            ls -lh /usr/share/edk2-aarch64/QEMU_EFI.fd
-            """.trimIndent(),
+        ensureUefiFirmware(onLog)
+        ensureQemuRomFiles(onLog)
+
+        val result = shellExecutor.executeWithArgs(
+            args = QemuNativeLauncher.buildInvocation(
+                paths.qemuNativeLib,
+                listOf("--version"),
+            ),
+            environment = QemuNativeLauncher.buildEnvironment(paths),
         )
-        onLog(result.combinedOutput())
+        onLog(buildString {
+            append(result.combinedOutput())
+            append("\nUEFI: ${paths.uefiFirmware.absolutePath} (${paths.uefiFirmware.length()} bytes)\n")
+            append("QEMU ROM dir (-L): ${paths.qemuShareDir.absolutePath}\n")
+            append("efi-virtio.rom: ${paths.qemuVirtioRom.length()} bytes\n")
+            append("ISO dir: ${paths.imagesDir.absolutePath}\n")
+        })
         return result
     }
 
@@ -75,13 +78,23 @@ class QemuManager(
             return ShellExecutor.Result(0, "", "", "skip")
         }
 
+        require(paths.qemuImgNativeLib.exists() && paths.qemuImgNativeLib.length() > 0L) {
+            "libqemu_img.so не знайдено в ${paths.qemuImgNativeLib.absolutePath}"
+        }
+
         onLog("Створення віртуального диска 48 GB для Windows...\n")
-        return prootExecutor.execInRootfs(
-            GuestShell.termuxBinary(
-                paths,
-                "qemu-img",
-                "create -f qcow2 /images/${paths.windowsDisk.name} 48G",
+        return shellExecutor.executeWithArgs(
+            args = QemuNativeLauncher.buildInvocation(
+                paths.qemuImgNativeLib,
+                listOf(
+                    "create",
+                    "-f",
+                    "qcow2",
+                    paths.windowsDisk.absolutePath,
+                    "48G",
+                ),
             ),
+            environment = QemuNativeLauncher.buildEnvironment(paths),
         )
     }
 
@@ -92,6 +105,13 @@ class QemuManager(
         require(paths.hasBootableImage()) {
             "Образ Windows не знайдено в ${paths.imagesDir.absolutePath}"
         }
+        require(paths.qemuNativeLib.exists() && paths.qemuNativeLib.length() > 0L) {
+            "libqemu.so не готовий. Завершіть крок встановлення QEMU."
+        }
+
+        onLine(">>> APK ${BuildConfig.VERSION_NAME} | assets v${EnvironmentAssets.ASSETS_VERSION}\n")
+        ensureUefiFirmware(onLine)
+        ensureQemuRomFiles(onLine)
 
         if (config.bootMode == WindowsBootMode.ISO) {
             val diskResult = createInstallDiskIfNeeded { line -> onLine("$line\n") }
@@ -100,88 +120,107 @@ class QemuManager(
             }
         }
 
-        val command = when (config.arch) {
-            WindowsImageArch.ARM64, WindowsImageArch.AUTO -> buildArm64Command(config)
-            WindowsImageArch.X86_64 -> buildX86Command(config)
+        val args = when (config.arch) {
+            WindowsImageArch.ARM64, WindowsImageArch.AUTO -> buildArm64Arguments(config)
+            WindowsImageArch.X86_64 -> error(
+                "Прямий запуск x86_64 QEMU ще не підтримується без PRoot. Оберіть ARM64 образ.",
+            )
         }
 
-        onLine(
-            when (config.arch) {
-                WindowsImageArch.ARM64, WindowsImageArch.AUTO ->
-                    ">>> Запуск Windows 11 ARM64 через QEMU (оптимально для вашого ARM-процесора)"
-                WindowsImageArch.X86_64 ->
-                    ">>> Запуск Windows 11 x86_64 через QEMU (повільна емуляція на ARM)"
-            },
+        onLine(">>> Запуск Windows 11 ARM64 через libqemu.so (прямий ProcessBuilder)\n")
+        onLine("$ ${QemuNativeLauncher.buildInvocation(paths.qemuNativeLib, args).joinToString(" ")}\n")
+
+        return shellExecutor.executeStreamingWithArgs(
+            args = QemuNativeLauncher.buildInvocation(paths.qemuNativeLib, args),
+            environment = QemuNativeLauncher.buildEnvironment(paths),
+            onLine = onLine,
         )
-        return prootExecutor.execStreamingInRootfs(command, onLine = onLine)
     }
 
-    private fun buildArm64Command(config: WindowsImageConfig): String {
-        val qemu = GuestShell.termuxBinary(
-            paths,
-            "qemu-system-aarch64-headless",
-            buildArm64Arguments(config),
-        )
-        return qemu
-    }
+    private fun buildArm64Arguments(config: WindowsImageConfig): List<String> = when (config.bootMode) {
+        WindowsBootMode.ISO -> {
+            require(paths.windowsIso.exists()) {
+                "ISO не знайдено: ${paths.windowsIso.absolutePath}"
+            }
+            QemuNativeLauncher.buildArm64IsoArguments(
+                uefiFirmware = paths.uefiFirmware,
+                isoFile = paths.windowsIso,
+                qemuShareDir = paths.qemuShareDir,
+                installDisk = paths.windowsDisk.takeIf { it.exists() },
+            )
+        }
 
-    private fun buildArm64Arguments(config: WindowsImageConfig): String {
-        val commonTail = """
-            -machine virt,gic-version=3 \
-            -cpu max \
-            -smp 4 \
-            -m 4096 \
-            -drive if=pflash,format=raw,readonly=on,file=/usr/share/edk2-aarch64/QEMU_EFI.fd \
-            -netdev user,id=net0 \
-            -device virtio-net-device,netdev=net0 \
-            -display none \
-            -serial mon:stdio \
-            -no-reboot
-        """.trimIndent()
-
-        return if (config.bootMode == WindowsBootMode.ISO) {
-            """
-            -drive if=none,file=/images/${paths.windowsIso.name},format=raw,media=cdrom,id=winiso \
-            -device virtio-scsi-device,id=scsi0 \
-            -device scsi-cd,bus=scsi0.0,drive=winiso,bootindex=0 \
-            -drive if=none,file=/images/${paths.windowsDisk.name},format=qcow2,id=windisk \
-            -device scsi-hd,bus=scsi0.0,drive=windisk,bootindex=1 \
-            $commonTail
-            """.trimIndent()
-        } else {
-            val disk = config.diskFileName ?: paths.windowsImage.name
-            """
-            -drive if=none,file=/images/$disk,format=qcow2,id=windisk \
-            -device virtio-blk-device,drive=windisk,bootindex=1 \
-            $commonTail
-            """.trimIndent()
+        WindowsBootMode.QCOW2 -> {
+            val disk = File(paths.imagesDir, config.diskFileName ?: paths.windowsImage.name)
+            require(disk.exists()) { "QCOW2 не знайдено: ${disk.absolutePath}" }
+            QemuNativeLauncher.buildArm64Qcow2Arguments(
+                uefiFirmware = paths.uefiFirmware,
+                diskFile = disk,
+                qemuShareDir = paths.qemuShareDir,
+            )
         }
     }
 
-    private fun buildX86Command(config: WindowsImageConfig): String {
-        val disk = when (config.bootMode) {
-            WindowsBootMode.ISO -> paths.windowsIso.name
-            WindowsBootMode.QCOW2 -> config.diskFileName ?: paths.windowsImage.name
-        }
-        val driveFormat = if (config.bootMode == WindowsBootMode.ISO) "raw" else "qcow2"
-        val bootDevice = if (config.bootMode == WindowsBootMode.ISO) "-boot d" else ""
+    private fun ensureQemuRomFiles(onLog: ((String) -> Unit)? = null) {
+        paths.qemuShareDir.mkdirs()
 
-        return GuestShell.termuxBinary(
-            paths,
-            "qemu-system-x86-64-headless",
-            """
-            -machine q35 \
-            -cpu qemu64 \
-            -smp 2 \
-            -m 2048 \
-            -drive file=/images/$disk,if=virtio,format=$driveFormat \
-            $bootDevice \
-            -netdev user,id=net0 \
-            -device virtio-net-pci,netdev=net0 \
-            -display none \
-            -serial mon:stdio \
-            -no-reboot
-            """.trimIndent(),
-        )
+        if (!paths.qemuVirtioRom.exists() || paths.qemuVirtioRom.length() == 0L) {
+            copyAsset(QEMU_VIRTIO_ROM_ASSET, paths.qemuVirtioRom)
+        }
+
+        val termuxRom = File(paths.termuxQemuShareDir, "efi-virtio.rom")
+        if ((!paths.qemuVirtioRom.exists() || paths.qemuVirtioRom.length() == 0L) &&
+            termuxRom.exists() && termuxRom.length() > 0L
+        ) {
+            termuxRom.copyTo(paths.qemuVirtioRom, overwrite = true)
+            onLog?.invoke("QEMU ROM copied from Termux: ${termuxRom.absolutePath}\n")
+        }
+
+        require(paths.qemuVirtioRom.exists() && paths.qemuVirtioRom.length() > 0L) {
+            buildString {
+                append("QEMU ROM efi-virtio.rom не знайдено. ")
+                append("Очікуваний шлях: ${paths.qemuVirtioRom.absolutePath}. ")
+                append("Повторіть ініціалізацію або збільште ASSETS_VERSION після оновлення payload.")
+                append("\nTermux ROM dir: ${paths.termuxQemuShareDir.list()?.joinToString() ?: "(порожньо)"}")
+            }
+        }
+
+        onLog?.invoke("QEMU ROM (-L): ${paths.qemuShareDir.absolutePath}\n")
+        onLog?.invoke("efi-virtio.rom: ${paths.qemuVirtioRom.length()} bytes\n")
     }
+
+    private fun ensureUefiFirmware(onLog: (String) -> Unit) {
+        paths.uefiFirmwareDir.mkdirs()
+        if (paths.uefiFirmware.exists() && paths.uefiFirmware.length() > 0L) {
+            return
+        }
+
+        copyAsset(QEMU_UEFI_ASSET, paths.uefiFirmware)
+        onLog("UEFI firmware: ${paths.uefiFirmware.absolutePath}\n")
+    }
+
+    private fun copyAsset(assetPath: String, target: File) {
+        target.parentFile?.mkdirs()
+        context.assets.open(assetPath).use { input ->
+            target.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+    }
+
+    private fun needsLibraryRefresh(): Boolean =
+        !EnvironmentReadiness.hasTermuxLibraries(paths)
+
+    private fun clearLegacyMarkers() {
+        listOf(
+            "qemu_native_installed.marker",
+            "qemu_termux_installed.marker",
+            "qemu_aarch64_installed.marker",
+            "qemu_installed.marker",
+        ).forEach { name ->
+            File(paths.cacheDir, name).delete()
+        }
+    }
+
+    fun isReady(): Boolean = EnvironmentReadiness.isQemuRuntimeReady(paths)
 }

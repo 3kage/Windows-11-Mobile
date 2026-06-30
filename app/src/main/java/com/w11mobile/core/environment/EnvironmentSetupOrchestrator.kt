@@ -16,6 +16,7 @@ class EnvironmentSetupOrchestrator(
 ) {
     private val paths = AppPaths(
         application.filesDir,
+        application.cacheDir,
         application.codeCacheDir,
         application.applicationInfo.nativeLibraryDir,
     )
@@ -32,7 +33,7 @@ class EnvironmentSetupOrchestrator(
     private val rootfsManager = RootfsManager(paths, downloadManager)
     private val prootExecutor = PRootExecutor(paths, prootInstaller, shellExecutor)
     private val guestBinaryInstaller = TermuxGuestBinaryInstaller(paths, downloadManager)
-    private val qemuManager = QemuManager(paths, prootExecutor, guestBinaryInstaller)
+    private val qemuManager = QemuManager(application, paths, shellExecutor, guestBinaryInstaller, preferences)
     private val windowsImageManager = WindowsImageManager(paths, downloadManager)
     private val localImageImporter = LocalImageImporter(application, paths)
 
@@ -50,11 +51,24 @@ class EnvironmentSetupOrchestrator(
         preferences.windowsImageArch = imageArch
 
         try {
+            migrateLegacyPersistedAssetsIfNeeded()
+
             runStep(SetupStep.VERIFY_DEVICE) { verifyDevice() }
-            runStep(SetupStep.INSTALL_PROOT) { installProot() }
-            runStep(SetupStep.INSTALL_ROOTFS) { installRootfs() }
-            runStep(SetupStep.CONFIGURE_ROOTFS) { configureRootfs() }
-            runStep(SetupStep.INSTALL_QEMU) { installQemu() }
+
+            if (EnvironmentReadiness.isPersistedEnvironmentReady(preferences, paths)) {
+                skipDeployedAssetsSteps()
+            } else {
+                runStep(SetupStep.INSTALL_PROOT) { installProot() }
+                runStep(SetupStep.INSTALL_ROOTFS) { installRootfs() }
+                runStep(SetupStep.CONFIGURE_ROOTFS) { configureRootfs() }
+            }
+
+            if (qemuManager.isReady()) {
+                skipQemuInstallStep()
+            } else {
+                runStep(SetupStep.INSTALL_QEMU) { installQemu() }
+            }
+
             runStep(SetupStep.DOWNLOAD_WINDOWS_IMAGE) {
                 prepareWindowsImage(
                     imageSource = imageSource,
@@ -66,9 +80,10 @@ class EnvironmentSetupOrchestrator(
             }
             runStep(SetupStep.VERIFY_ENVIRONMENT) { verifyEnvironment() }
 
+            preferences.lastAssetsVersion = EnvironmentAssets.ASSETS_VERSION
             onStepChanged(SetupStep.COMPLETE)
             onProgressChanged(100, false)
-            preferences.setupComplete = true
+            commitEnvironmentReady()
             onLog("\n>>> Середовище Windows 11 готове до запуску.\n")
         } catch (error: Exception) {
             onStepChanged(SetupStep.ERROR)
@@ -78,8 +93,11 @@ class EnvironmentSetupOrchestrator(
     }
 
     suspend fun launchWindows() = withContext(Dispatchers.IO) {
-        require(canLaunchWindows()) {
+        require(refreshEnvironmentReadinessFromDisk()) {
             "Спочатку завершіть ініціалізацію та завантажте образ Windows."
+        }
+        require(paths.hasBootableImage()) {
+            "Образ Windows не знайдено. Імпортуйте ISO або QCOW2."
         }
         qemuManager.launchWindows(
             config = paths.readImageConfig() ?: defaultImageConfig(),
@@ -110,15 +128,36 @@ class EnvironmentSetupOrchestrator(
         }
     }
 
-    fun isEnvironmentReady(): Boolean =
-        paths.proot.canExecute() &&
-            File(paths.rootfsDir, "bin/sh").exists() &&
-            (            File(paths.cacheDir, "qemu_termux_installed.marker").exists() ||
-                File(paths.cacheDir, "qemu_aarch64_installed.marker").exists() ||
-                File(paths.cacheDir, "qemu_installed.marker").exists())
+    fun isEnvironmentReady(): Boolean = refreshEnvironmentReadinessFromDisk()
 
     fun canLaunchWindows(): Boolean =
         isEnvironmentReady() && paths.hasBootableImage()
+
+    /**
+     * Reconcile SharedPreferences with files already on disk.
+     * Never triggers full rootfs/Termux redeploy — only copies small QEMU assets if missing.
+     */
+    fun refreshEnvironmentReadinessFromDisk(): Boolean {
+        migrateLegacyPersistedAssetsIfNeeded()
+        qemuManager.ensureRuntimeAssets()
+
+        val runtimeReady =
+            EnvironmentReadiness.hasRootfs(paths) &&
+                EnvironmentReadiness.hasTermuxLibraries(paths) &&
+                paths.prootNativeLib.exists() &&
+                paths.prootNativeLib.length() > 0L &&
+                prootInstaller.isProotReady() &&
+                qemuManager.isReady()
+
+        if (runtimeReady && !preferences.isEnvironmentReadyFlagSet()) {
+            commitEnvironmentReady()
+            onLog(">>> Стан готовності збережено (assets v${EnvironmentAssets.ASSETS_VERSION}).\n")
+        }
+
+        return runtimeReady && preferences.isEnvironmentReadyFlagSet()
+    }
+
+    fun ensureReadyForLaunch(): Boolean = refreshEnvironmentReadinessFromDisk()
 
     private suspend fun runStep(step: SetupStep, block: suspend () -> Unit) {
         onStepChanged(step)
@@ -136,11 +175,53 @@ class EnvironmentSetupOrchestrator(
         logCommand("id")
     }
 
+    private fun migrateLegacyPersistedAssetsIfNeeded() {
+        if (EnvironmentReadiness.isAssetsVersionCurrent(preferences)) {
+            return
+        }
+        if (!EnvironmentReadiness.hasRootfs(paths) ||
+            !EnvironmentReadiness.hasTermuxLibraries(paths) ||
+            !preferences.setupComplete
+        ) {
+            return
+        }
+
+        onLog(
+            "\n>>> Знайдено розгорнуте середовище з попередньої версії APK — " +
+                "прив'язуємо до assets v${EnvironmentAssets.ASSETS_VERSION} без перекопіювання.\n",
+        )
+        commitEnvironmentReady()
+    }
+
+    private fun commitEnvironmentReady() {
+        if (!preferences.markEnvironmentReadyCommitted()) {
+            error("Не вдалося зберегти стан готовності середовища в SharedPreferences")
+        }
+    }
+
+    private fun skipDeployedAssetsSteps() {
+        onLog(
+            "\n>>> Середовище вже розгорнуто (assets v${EnvironmentAssets.ASSETS_VERSION}) — " +
+                "пропускаємо PRoot/rootfs/Termux libs.\n",
+        )
+        val progressAfterConfigure = SetupStep.progressBefore(SetupStep.INSTALL_QEMU)
+        onStepChanged(SetupStep.CONFIGURE_ROOTFS)
+        onProgressChanged(progressAfterConfigure, false)
+    }
+
+    private fun skipQemuInstallStep() {
+        onLog("\n=== ${SetupStep.INSTALL_QEMU.labelUk} ===\nQEMU вже встановлено.\n")
+        val progressAfterQemu =
+            SetupStep.progressBefore(SetupStep.INSTALL_QEMU) + SetupStep.INSTALL_QEMU.weight
+        onStepChanged(SetupStep.INSTALL_QEMU)
+        onProgressChanged(progressAfterQemu.coerceAtMost(100), false)
+    }
+
     private suspend fun installProot() {
         prootInstaller.install { downloaded, total ->
             reportDownloadProgress(SetupStep.INSTALL_PROOT, downloaded, total)
         }
-        onLog("PRoot: ${paths.proot.absolutePath}\n")
+        onLog("PRoot: ${paths.prootNativeLib.absolutePath}\n")
         onLog("Loader: ${prootInstaller.findProotLoader()?.absolutePath}\n")
         onLog("Libs: ${paths.libDir.absolutePath}\n")
     }
@@ -298,19 +379,26 @@ class EnvironmentSetupOrchestrator(
                 paths.windowsIso.length(),
             )
         } else if (isIso) {
-            onLog("Конвертація x86 ISO → QCOW2 через qemu-img...\n")
+            onLog("Конвертація x86 ISO → QCOW2 через libqemu_img.so...\n")
             val isoFile = File(paths.imagesDir, "windows.iso")
             if (isoFile.exists()) isoFile.delete()
             require(importedFile.renameTo(isoFile)) { "Не вдалося перемістити ISO" }
-            val result = prootExecutor.execInRootfs(
-                GuestShell.termuxBinary(
-                    paths,
-                    "qemu-img",
-                    "convert -O qcow2 /images/windows.iso /images/windows.qcow2 && rm -f /images/windows.iso",
+            val result = shellExecutor.executeWithArgs(
+                args = QemuNativeLauncher.buildInvocation(
+                    paths.qemuImgNativeLib,
+                    listOf(
+                        "convert",
+                        "-O",
+                        "qcow2",
+                        isoFile.absolutePath,
+                        paths.windowsImage.absolutePath,
+                    ),
                 ),
+                environment = QemuNativeLauncher.buildEnvironment(paths),
             )
             logResult(result)
             require(result.success) { "Не вдалося конвертувати ISO в QCOW2" }
+            isoFile.delete()
             WindowsImageConfigStore.write(
                 paths.windowsImageMeta,
                 WindowsImageConfig(
@@ -349,15 +437,7 @@ class EnvironmentSetupOrchestrator(
     }
 
     private suspend fun verifyEnvironment() {
-        val result = prootExecutor.execInRootfs(
-            """
-            echo "=== Перевірка ==="
-            ls -lh /exec/guest
-            ${GuestShell.termuxBinary(paths, "qemu-system-aarch64-headless", "--version")}
-            ls -lh /usr/share/edk2-aarch64/QEMU_EFI.fd
-            ls -lh /images || true
-            """.trimIndent(),
-        )
+        val result = qemuManager.verifyInstallation(onLog = { line -> onLog("$line\n") })
         logResult(result)
         require(result.success) { "Фінальна перевірка середовища не пройшла" }
     }

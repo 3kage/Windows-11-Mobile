@@ -7,7 +7,7 @@ import java.io.File
 
 /**
  * Executes shell commands in user-space via [ProcessBuilder].
- * Intended for PRoot/Termux-style environments where no root access is required.
+ * PRoot is launched as a native library ([libproot.so]) through [linker64], Winlator-style.
  */
 class ShellExecutor(
     private val workingDirectory: File? = null,
@@ -29,6 +29,84 @@ class ShellExecutor(
                 append(stderr.trimEnd())
             }
         }
+    }
+
+    data class ProotLaunchRequest(
+        val prootNativeLib: File,
+        val rootfsDir: File,
+        val guestCommand: String,
+        val guestShell: String = GUEST_SHELL,
+        val extraBindFlags: List<String> = emptyList(),
+    )
+
+    companion object {
+        private const val LINKER64 = "/system/bin/linker64"
+        const val GUEST_SHELL = "/bin/sh"
+        const val LINUX_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/system/bin"
+
+        private val ANDROID_SYSTEM_BINDS = listOf(
+            "-b", "/system",
+            "-b", "/dev",
+            "-b", "/proc",
+            "-b", "/sys",
+        )
+
+        /**
+         * Required PRoot environment for Android 10+ / W^X and seccomp compatibility.
+         */
+        fun buildProotEnvironment(
+            appCacheDir: File,
+            prootLoaderPath: String,
+            ldLibraryPath: String,
+        ): Map<String, String> {
+            val tmpDir = File(appCacheDir, "proot-tmp").apply { mkdirs() }
+            return mapOf(
+                "PROOT_LOADER" to prootLoaderPath,
+                "PROOT_NO_SECCOMP" to "1",
+                "PROOT_TMPDIR" to tmpDir.absolutePath,
+                "PROOT_TMP_DIR" to tmpDir.absolutePath,
+                "PROOT_F2FS_WORKAROUND" to "1",
+                "LD_LIBRARY_PATH" to ldLibraryPath,
+                "PATH" to LINUX_PATH,
+            )
+        }
+
+        /**
+         * PRoot CLI arguments: system binds, guest rootfs, then [guestShell] as the final executable.
+         */
+        fun buildProotArguments(request: ProotLaunchRequest): List<String> = buildList {
+            addAll(ANDROID_SYSTEM_BINDS)
+            addAll(request.extraBindFlags)
+            add("--link2symlink")
+            add("-0")
+            add("-r")
+            add(request.rootfsDir.absolutePath)
+            add("-w")
+            add("/root")
+            add(request.guestShell)
+            add("-c")
+            add(request.guestCommand)
+        }
+
+        /**
+         * Full host argv: linker64 + libproot.so + [buildProotArguments].
+         */
+        fun buildNativeProotInvocation(request: ProotLaunchRequest): List<String> =
+            buildList {
+                add(LINKER64)
+                add(request.prootNativeLib.absolutePath)
+                addAll(buildProotArguments(request))
+            }
+
+        /**
+         * Host argv for Bionic-linked native binaries (QEMU, qemu-img, …).
+         */
+        fun buildNativeBinaryInvocation(binaryLib: File, args: List<String>): List<String> =
+            buildList {
+                add(LINKER64)
+                add(binaryLib.absolutePath)
+                addAll(args)
+            }
     }
 
     suspend fun execute(
@@ -127,8 +205,12 @@ class ShellExecutor(
     ) {
         workingDirectory?.let { processBuilder.directory(it) }
         val mergedEnvironment = environment + extraEnvironment
+        val env = processBuilder.environment()
         if (mergedEnvironment.isNotEmpty()) {
-            processBuilder.environment().putAll(mergedEnvironment)
+            env.putAll(mergedEnvironment)
+        }
+        if (env["PATH"].isNullOrBlank()) {
+            env["PATH"] = LINUX_PATH
         }
         processBuilder.redirectErrorStream(false)
     }

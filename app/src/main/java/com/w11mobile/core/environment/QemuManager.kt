@@ -132,11 +132,24 @@ class QemuManager(
         onLine(">>> Запуск Windows 11 ARM64 через libqemu.so (прямий ProcessBuilder)\n")
         onLine("$ ${QemuNativeLauncher.buildInvocation(paths.qemuNativeLib, args).joinToString(" ")}\n")
 
-        return shellExecutor.executeStreamingWithArgs(
-            args = QemuNativeLauncher.buildInvocation(paths.qemuNativeLib, args),
-            environment = QemuNativeLauncher.buildEnvironment(paths),
-            onLine = onLine,
-        )
+        val isoBootKeyInjector = if (config.bootMode == WindowsBootMode.ISO) {
+            QemuIsoBootKeyInjector().also { it.onBootStarted() }
+        } else {
+            null
+        }
+
+        return try {
+            shellExecutor.executeStreamingWithArgs(
+                args = QemuNativeLauncher.buildInvocation(paths.qemuNativeLib, args),
+                environment = QemuNativeLauncher.buildEnvironment(paths),
+                onLine = { line ->
+                    isoBootKeyInjector?.onOutputLine(line)
+                    onLine(line)
+                },
+            )
+        } finally {
+            isoBootKeyInjector?.stop()
+        }
     }
 
     private fun buildArm64Arguments(config: WindowsImageConfig): List<String> = when (config.bootMode) {

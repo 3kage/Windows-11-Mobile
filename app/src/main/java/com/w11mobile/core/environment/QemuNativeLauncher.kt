@@ -9,6 +9,8 @@ object QemuNativeLauncher {
     const val VNC_HOST = "127.0.0.1"
     /** QEMU VNC display :0 → TCP 5900 */
     const val VNC_PORT = 5900
+    const val MONITOR_HOST = "127.0.0.1"
+    const val MONITOR_PORT = 4444
 
     private const val VIRTIO_ROM = "efi-virtio.rom"
 
@@ -46,18 +48,20 @@ object QemuNativeLauncher {
             add("-device")
             add("qemu-xhci,id=usbctrl")
             add("-drive")
-            add("file=${isoFile.absolutePath},if=none,id=winiso,format=raw")
+            add("file=${isoFile.absolutePath},if=none,id=winiso,format=raw,readonly=on")
             add("-device")
-            add("usb-storage,bus=usbctrl.0,drive=winiso,bootindex=1")
+            add("usb-storage,bus=usbctrl.0,drive=winiso,bootindex=1,removable=on")
             if (installDisk != null && installDisk.exists()) {
                 add("-drive")
                 add("file=${installDisk.absolutePath},if=none,format=qcow2,id=windisk")
                 add("-device")
                 add("virtio-blk-pci,drive=windisk,bootindex=2,romfile=$virtioRom")
             }
-            addUsbTabletAndVncDisplay()
+            addUsbInputAndVnc()
+            add("-monitor")
+            add("tcp:$MONITOR_HOST:$MONITOR_PORT,server,nowait")
             add("-serial")
-            add("mon:stdio")
+            add("stdio")
             add("-no-reboot")
         }
     }
@@ -87,14 +91,16 @@ object QemuNativeLauncher {
             add("file=${diskFile.absolutePath},if=none,format=qcow2,id=windisk")
             add("-device")
             add("virtio-blk-pci,drive=windisk,bootindex=1,romfile=$virtioRom")
-            addUsbTabletAndVncDisplay()
+            addUsbInputAndVnc()
             add("-serial")
-            add("mon:stdio")
+            add("stdio")
             add("-no-reboot")
         }
     }
 
-    private fun MutableList<String>.addUsbTabletAndVncDisplay() {
+    private fun MutableList<String>.addUsbInputAndVnc() {
+        add("-device")
+        add("usb-kbd,bus=usbctrl.0")
         add("-device")
         add("usb-tablet,bus=usbctrl.0")
         add("-vnc")

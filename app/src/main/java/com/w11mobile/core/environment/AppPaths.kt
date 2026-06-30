@@ -18,6 +18,10 @@ class AppPaths(
     val guestBusybox: File = File(nativeLibraryDir, "libalpine_busybox.so")
     val prootNativeLib: File = File(nativeLibraryDir, "libproot.so")
     val prootLoaderNativeLib: File = File(nativeLibraryDir, "libproot_loader.so")
+    val qemuNativeLib: File = File(nativeLibraryDir, "libqemu.so")
+    val qemuImgNativeLib: File = File(nativeLibraryDir, "libqemu_img.so")
+    val uefiFirmwareDir: File = File(filesDir, "firmware").apply { mkdirs() }
+    val uefiFirmware: File = File(uefiFirmwareDir, "QEMU_EFI.fd")
     val termuxRoot: File = File(filesDir, "termux").apply { mkdirs() }
     val termuxPrefix: File = File(termuxRoot, "usr").apply { mkdirs() }
     val binDir: File = File(termuxPrefix, "bin").apply { mkdirs() }

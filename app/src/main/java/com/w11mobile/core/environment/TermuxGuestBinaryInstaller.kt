@@ -16,6 +16,25 @@ class TermuxGuestBinaryInstaller(
     private val searchRoots: List<File>
         get() = listOf(paths.binDir, paths.termuxPrefix, paths.termuxRoot)
 
+    suspend fun installPackageLibraries(
+        packages: List<String>,
+        onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit = { _, _ -> },
+        onLog: (String) -> Unit = {},
+    ) {
+        val packageSet = packages.flatMap { packageResolver.resolveInstallOrder(it) }.distinct()
+        for (packageName in packageSet) {
+            onLog("Termux libs: $packageName\n")
+            val debFile = File(paths.cacheDir, "guest-$packageName.deb")
+            val packageUrl = packageResolver.resolveDebUrl(packageName)
+            downloadManager.download(packageUrl, debFile, onProgress)
+            ArchiveExtractor.extractTermuxDeb(debFile, paths.termuxPrefix)
+            debFile.delete()
+        }
+
+        SharedLibraryMaterializer.materialize(paths.libDir)
+        onLog("Termux shared libs: ${paths.libDir.absolutePath}\n")
+    }
+
     suspend fun installExecutables(
         packages: List<String>,
         executables: List<TermuxExecutableSpec>,

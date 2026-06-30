@@ -33,7 +33,7 @@ class EnvironmentSetupOrchestrator(
     private val rootfsManager = RootfsManager(paths, downloadManager)
     private val prootExecutor = PRootExecutor(paths, prootInstaller, shellExecutor)
     private val guestBinaryInstaller = TermuxGuestBinaryInstaller(paths, downloadManager)
-    private val qemuManager = QemuManager(paths, prootExecutor, guestBinaryInstaller)
+    private val qemuManager = QemuManager(application, paths, shellExecutor, guestBinaryInstaller)
     private val windowsImageManager = WindowsImageManager(paths, downloadManager)
     private val localImageImporter = LocalImageImporter(application, paths)
 
@@ -115,9 +115,7 @@ class EnvironmentSetupOrchestrator(
         paths.prootNativeLib.exists() &&
             paths.prootNativeLib.length() > 0L &&
             File(paths.rootfsDir, "bin/sh").exists() &&
-            (            File(paths.cacheDir, "qemu_termux_installed.marker").exists() ||
-                File(paths.cacheDir, "qemu_aarch64_installed.marker").exists() ||
-                File(paths.cacheDir, "qemu_installed.marker").exists())
+            qemuManager.isReady()
 
     fun canLaunchWindows(): Boolean =
         isEnvironmentReady() && paths.hasBootableImage()
@@ -300,19 +298,26 @@ class EnvironmentSetupOrchestrator(
                 paths.windowsIso.length(),
             )
         } else if (isIso) {
-            onLog("Конвертація x86 ISO → QCOW2 через qemu-img...\n")
+            onLog("Конвертація x86 ISO → QCOW2 через libqemu_img.so...\n")
             val isoFile = File(paths.imagesDir, "windows.iso")
             if (isoFile.exists()) isoFile.delete()
             require(importedFile.renameTo(isoFile)) { "Не вдалося перемістити ISO" }
-            val result = prootExecutor.execInRootfs(
-                GuestShell.termuxBinary(
-                    paths,
-                    "qemu-img",
-                    "convert -O qcow2 /images/windows.iso /images/windows.qcow2 && rm -f /images/windows.iso",
+            val result = shellExecutor.executeWithArgs(
+                args = QemuNativeLauncher.buildInvocation(
+                    paths.qemuImgNativeLib,
+                    listOf(
+                        "convert",
+                        "-O",
+                        "qcow2",
+                        isoFile.absolutePath,
+                        paths.windowsImage.absolutePath,
+                    ),
                 ),
+                environment = QemuNativeLauncher.buildEnvironment(paths),
             )
             logResult(result)
             require(result.success) { "Не вдалося конвертувати ISO в QCOW2" }
+            isoFile.delete()
             WindowsImageConfigStore.write(
                 paths.windowsImageMeta,
                 WindowsImageConfig(
@@ -351,15 +356,7 @@ class EnvironmentSetupOrchestrator(
     }
 
     private suspend fun verifyEnvironment() {
-        val result = prootExecutor.execInRootfs(
-            """
-            echo "=== Перевірка ==="
-            ls -lh /exec/guest
-            ${GuestShell.termuxBinary(paths, QemuManager.QEMU_SYSTEM_AARCH64, "--version")}
-            ls -lh /usr/share/edk2-aarch64/QEMU_EFI.fd
-            ls -lh /images || true
-            """.trimIndent(),
-        )
+        val result = qemuManager.verifyInstallation(onLog = { line -> onLog("$line\n") })
         logResult(result)
         require(result.success) { "Фінальна перевірка середовища не пройшла" }
     }

@@ -97,6 +97,16 @@ class ShellExecutor(
                 add(request.prootNativeLib.absolutePath)
                 addAll(buildProotArguments(request))
             }
+
+        /**
+         * Host argv for Bionic-linked native binaries (QEMU, qemu-img, …).
+         */
+        fun buildNativeBinaryInvocation(binaryLib: File, args: List<String>): List<String> =
+            buildList {
+                add(LINKER64)
+                add(binaryLib.absolutePath)
+                addAll(args)
+            }
     }
 
     suspend fun execute(

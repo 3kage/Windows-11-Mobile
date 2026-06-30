@@ -5,6 +5,11 @@ import java.io.File
 
 object QemuNativeLauncher {
     const val LINKER64 = "/system/bin/linker64"
+    const val VNC_DISPLAY = "vnc=127.0.0.1:0,websocket=off"
+    const val VNC_HOST = "127.0.0.1"
+    /** QEMU VNC display :0 → TCP 5900 */
+    const val VNC_PORT = 5900
+
     private const val VIRTIO_ROM = "efi-virtio.rom"
 
     fun buildEnvironment(paths: AppPaths): Map<String, String> = mapOf(
@@ -50,8 +55,7 @@ object QemuNativeLauncher {
                 add("-device")
                 add("virtio-blk-pci,drive=windisk,bootindex=2,romfile=$virtioRom")
             }
-            add("-display")
-            add("none")
+            addUsbTabletAndVncDisplay()
             add("-serial")
             add("mon:stdio")
             add("-no-reboot")
@@ -77,15 +81,23 @@ object QemuNativeLauncher {
             add("4096")
             add("-bios")
             add(uefiFirmware.absolutePath)
+            add("-device")
+            add("qemu-xhci,id=usbctrl")
             add("-drive")
             add("file=${diskFile.absolutePath},if=none,format=qcow2,id=windisk")
             add("-device")
             add("virtio-blk-pci,drive=windisk,bootindex=1,romfile=$virtioRom")
-            add("-display")
-            add("none")
+            addUsbTabletAndVncDisplay()
             add("-serial")
             add("mon:stdio")
             add("-no-reboot")
         }
+    }
+
+    private fun MutableList<String>.addUsbTabletAndVncDisplay() {
+        add("-device")
+        add("usb-tablet,bus=usbctrl.0")
+        add("-display")
+        add(VNC_DISPLAY)
     }
 }

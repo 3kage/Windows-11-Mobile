@@ -39,7 +39,24 @@ class QemuNativeLauncherTest {
         assertTrue(args.contains("usb-storage,bus=usbctrl.0,drive=winiso,bootindex=1"))
         assertTrue(args.contains("file=${disk.absolutePath},if=none,format=qcow2,id=windisk"))
         assertTrue(args.contains("virtio-blk-pci,drive=windisk,bootindex=2,romfile=${File(romDir, "efi-virtio.rom").absolutePath}"))
+        assertTrue(args.contains("usb-tablet,bus=usbctrl.0"))
+        assertTrue(args.contains(QemuNativeLauncher.VNC_DISPLAY))
         assertFalse(args.contains("-cdrom"))
+        assertFalse(args.contains("none"))
+    }
+
+    @Test
+    fun buildArm64Qcow2Arguments_usesVncAndUsbTablet() {
+        val uefi = File("/firmware/QEMU_EFI.fd")
+        val disk = File("/images/windows.qcow2")
+        val romDir = File("/qemu/share")
+
+        val args = QemuNativeLauncher.buildArm64Qcow2Arguments(uefi, disk, romDir)
+
+        assertTrue(args.contains("qemu-xhci,id=usbctrl"))
+        assertTrue(args.contains("usb-tablet,bus=usbctrl.0"))
+        assertTrue(args.contains(QemuNativeLauncher.VNC_DISPLAY))
+        assertFalse(args.any { it == "none" })
     }
 
     @Test

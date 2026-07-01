@@ -101,7 +101,7 @@ object QemuNativeLauncher {
 
     private fun MutableList<String>.addUsbInputAndVncDisplay() {
         add("-device")
-        add("virtio-gpu-pci")
+        add("ramfb")
         add("-device")
         add("usb-kbd,bus=usbctrl.0")
         add("-device")

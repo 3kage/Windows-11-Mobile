@@ -32,6 +32,34 @@
         app:layout_constraintTop_toBottomOf="@id/btnInitializeWindows"
         tools:visibility="visible" />
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnOpenTouchDisplay"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:layout_marginTop="8dp"
+        android:text="@string/open_touch_display"
+        android:visibility="gone"
+        app:cornerRadius="12dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnLaunchWindows"
+        tools:visibility="visible" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnSendAnyKey"
+        style="@style/Widget.Material3.Button.OutlinedButton"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:layout_marginTop="8dp"
+        android:text="@string/windows_display_any_key"
+        android:visibility="gone"
+        app:cornerRadius="12dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnOpenTouchDisplay"
+        tools:visibility="visible" />
+
     <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/imageSourceToggle"
         android:layout_width="0dp"
@@ -40,7 +68,7 @@
         app:checkedButton="@+id/btnSourceUrl"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btnLaunchWindows"
+        app:layout_constraintTop_toBottomOf="@id/btnSendAnyKey"
         app:selectionRequired="true"
         app:singleSelection="true">
 

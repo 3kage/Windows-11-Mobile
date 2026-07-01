@@ -8,6 +8,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.w11mobile.core.environment.EnvironmentSetupOrchestrator
 import com.w11mobile.core.environment.ImageSource
+import com.w11mobile.core.environment.QemuRuntimeEvents
 import com.w11mobile.core.environment.SetupPreferences
 import com.w11mobile.core.environment.SetupStep
 import com.w11mobile.core.environment.WindowsImageArch
@@ -36,6 +37,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     init {
+        QemuRuntimeEvents.onFatalError = { message ->
+            appendLog("\n>>> $message\n")
+            updateState {
+                copy(
+                    errorMessage = message,
+                    windowsSessionActive = false,
+                    isRunning = false,
+                )
+            }
+        }
         viewModelScope.launch(Dispatchers.IO) {
             val initialState = loadInitialUiState()
             uiStateStore.set(initialState)
@@ -146,20 +157,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun launchWindows11() {
-        val state = _uiState.value ?: return
-        if (state.isRunning) return
-
-        viewModelScope.launch {
-            updateState { copy(isRunning = true, errorMessage = null) }
+    suspend fun prepareWindowsLaunch(): Boolean? = withContext(Dispatchers.IO) {
+        try {
             appendLog("\n>>> Запуск Windows 11...\n")
+            if (!orchestrator.refreshEnvironmentReadinessFromDisk()) {
+                error("Середовище не готове. Завершіть ініціалізацію один раз — повторне розпакування не потрібне.")
+            }
+            if (!orchestrator.canLaunchWindows()) {
+                error("Образ Windows не знайдено. Імпортуйте ISO або QCOW2.")
+            }
+            orchestrator.isIsoBootMode()
+        } catch (error: Exception) {
+            appendLog("\n[ПОМИЛКА] ${error.message}\n")
+            updateState { copy(errorMessage = error.message) }
+            null
+        }
+    }
+
+    fun runWindowsLaunch(isoBootMode: Boolean) {
+        viewModelScope.launch {
+            updateState {
+                copy(
+                    isRunning = true,
+                    windowsSessionActive = true,
+                    isoBootMode = isoBootMode,
+                    errorMessage = null,
+                )
+            }
+            if (isoBootMode) {
+                appendLog(">>> Торкніться «Будь-яка клавіша» на сенсорному екрані або в головному меню.\n")
+            } else {
+                appendLog(">>> Керуйте Windows через сенсорний екран.\n")
+            }
             try {
-                if (!withContext(Dispatchers.IO) { orchestrator.refreshEnvironmentReadinessFromDisk() }) {
-                    error("Середовище не готове. Завершіть ініціалізацію один раз — повторне розпакування не потрібне.")
-                }
-                if (!withContext(Dispatchers.IO) { orchestrator.canLaunchWindows() }) {
-                    error("Образ Windows не знайдено. Імпортуйте ISO або QCOW2.")
-                }
                 orchestrator.launchWindows()
             } catch (error: Exception) {
                 appendLog("\n[ПОМИЛКА] ${error.message}\n")
@@ -169,12 +199,34 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 updateState {
                     copy(
                         isRunning = false,
+                        windowsSessionActive = false,
                         environmentReady = flags.first,
                         canLaunchWindows = flags.second,
                     )
                 }
             }
         }
+    }
+
+    fun sendAnyKeyToQemu() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val sent = com.w11mobile.core.environment.QemuMonitorClient.sendKeyWithRetries()
+            withContext(Dispatchers.Main) {
+                if (sent) {
+                    appendLog(">>> Клавішу надіслано в QEMU monitor (127.0.0.1:4444).\n")
+                } else {
+                    appendLog(">>> Не вдалося надіслати клавішу. Переконайтеся, що Windows запущено.\n")
+                    updateState { copy(errorMessage = "QEMU monitor недоступний") }
+                }
+            }
+        }
+    }
+
+    fun isIsoBootModeCached(): Boolean = _uiState.value?.isoBootMode == true
+
+    override fun onCleared() {
+        QemuRuntimeEvents.onFatalError = null
+        super.onCleared()
     }
 
     fun clearLog() {

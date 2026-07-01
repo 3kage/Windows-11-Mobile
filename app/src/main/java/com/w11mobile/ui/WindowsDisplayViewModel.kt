@@ -20,14 +20,22 @@ class WindowsDisplayViewModel : ViewModel() {
     private val _vncConnected = MutableLiveData(false)
     val vncConnected: LiveData<Boolean> = _vncConnected
 
+    private val _qemuFatalError = MutableLiveData<String?>(null)
+    val qemuFatalError: LiveData<String?> = _qemuFatalError
+
     fun configure(showBootOverlay: Boolean) {
         _bootOverlayVisible.value = showBootOverlay
         _monitorError.value = null
         _vncConnected.value = false
+        _qemuFatalError.value = null
     }
 
     fun onVncConnected() {
         _vncConnected.value = true
+    }
+
+    fun onQemuProcessDied(exitCode: Int) {
+        _qemuFatalError.value = "Помилка: Процес QEMU несподівано завершився з кодом $exitCode"
     }
 
     fun sendAnyKeyToQemu() {

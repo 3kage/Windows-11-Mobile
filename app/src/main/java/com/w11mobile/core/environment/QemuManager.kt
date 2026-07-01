@@ -132,6 +132,8 @@ class QemuManager(
         onLine(">>> Запуск Windows 11 ARM64 через libqemu.so (прямий ProcessBuilder)\n")
         onLine("$ ${QemuNativeLauncher.buildInvocation(paths.qemuNativeLib, args).joinToString(" ")}\n")
 
+        QemuProcessSession.markLaunchStarting()
+
         val isoBootKeyInjector = if (config.bootMode == WindowsBootMode.ISO) {
             QemuIsoBootKeyInjector().also { it.onBootStarted() }
         } else {

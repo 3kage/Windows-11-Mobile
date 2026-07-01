@@ -2,12 +2,16 @@ package com.w11mobile.ui
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
+import com.w11mobile.core.environment.QemuProcessSession
+import com.w11mobile.core.environment.QemuRuntimeEvents
 import com.w11mobile.databinding.ActivityWindowsDisplayBinding
 import com.w11mobile.vnc.MinimalVncClient
+import com.w11mobile.vnc.VncConnectionDiagnostics
 import com.w11mobile.vnc.VncPortProbe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -67,6 +71,13 @@ class WindowsDisplayActivity : AppCompatActivity() {
             }
         }
 
+        viewModel.qemuFatalError.observe(this) { message ->
+            if (!message.isNullOrBlank()) {
+                binding.vncStatusText.text = message
+                finish()
+            }
+        }
+
         startVncConnection()
     }
 
@@ -87,7 +98,14 @@ class WindowsDisplayActivity : AppCompatActivity() {
                     attempt,
                 )
 
-                if (!withContext(Dispatchers.IO) { VncPortProbe.isOpen() }) {
+                val exitCode = withContext(Dispatchers.IO) { QemuProcessSession.resolvedExitCodeOrNull() }
+                if (exitCode != null) {
+                    handleQemuProcessDeath(exitCode)
+                    return@launch
+                }
+
+                val probe = withContext(Dispatchers.IO) { VncPortProbe.probe() }
+                if (!probe.open) {
                     delay(RETRY_DELAY_MS)
                     continue
                 }
@@ -125,10 +143,22 @@ class WindowsDisplayActivity : AppCompatActivity() {
                         )
                     }
                     return@launch
-                } catch (_: Exception) {
+                } catch (error: Exception) {
+                    VncConnectionDiagnostics.logSocketFailure(
+                        stage = "RFB session attempt $attempt",
+                        host = probe.host,
+                        port = probe.port,
+                        error = error,
+                    )
                     client.close()
                     if (vncClient === client) {
                         vncClient = null
+                    }
+
+                    val postConnectExit = QemuProcessSession.resolvedExitCodeOrNull()
+                    if (postConnectExit != null) {
+                        handleQemuProcessDeath(postConnectExit)
+                        return@launch
                     }
                     delay(RETRY_DELAY_MS)
                 }
@@ -137,7 +167,17 @@ class WindowsDisplayActivity : AppCompatActivity() {
         }
     }
 
+    private fun handleQemuProcessDeath(exitCode: Int) {
+        connectJob?.cancel()
+        val message = getString(com.w11mobile.R.string.windows_display_qemu_died, exitCode)
+        Log.e(TAG, message)
+        QemuRuntimeEvents.publishFatal(message)
+        viewModel.onQemuProcessDied(exitCode)
+    }
+
     companion object {
+        private const val TAG = "WindowsDisplay"
+
         const val EXTRA_SHOW_BOOT_OVERLAY = "show_boot_overlay"
 
         private const val MAX_CONNECT_ATTEMPTS = 45

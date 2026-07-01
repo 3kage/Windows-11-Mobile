@@ -8,6 +8,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.w11mobile.core.environment.EnvironmentSetupOrchestrator
 import com.w11mobile.core.environment.ImageSource
+import com.w11mobile.core.environment.QemuRuntimeEvents
 import com.w11mobile.core.environment.SetupPreferences
 import com.w11mobile.core.environment.SetupStep
 import com.w11mobile.core.environment.WindowsImageArch
@@ -36,6 +37,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     init {
+        QemuRuntimeEvents.onFatalError = { message ->
+            appendLog("\n>>> $message\n")
+            updateState {
+                copy(
+                    errorMessage = message,
+                    windowsSessionActive = false,
+                    isRunning = false,
+                )
+            }
+        }
         viewModelScope.launch(Dispatchers.IO) {
             val initialState = loadInitialUiState()
             uiStateStore.set(initialState)
@@ -212,6 +223,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun isIsoBootModeCached(): Boolean = _uiState.value?.isoBootMode == true
+
+    override fun onCleared() {
+        QemuRuntimeEvents.onFatalError = null
+        super.onCleared()
+    }
 
     fun clearLog() {
         updateState { copy(terminalLog = "") }

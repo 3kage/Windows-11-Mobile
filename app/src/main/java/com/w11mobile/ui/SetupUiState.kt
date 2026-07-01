@@ -19,4 +19,6 @@ data class SetupUiState(
     val localImageName: String? = null,
     val windowsImageArch: WindowsImageArch = WindowsImageArch.AUTO,
     val errorMessage: String? = null,
+    val windowsSessionActive: Boolean = false,
+    val isoBootMode: Boolean = false,
 )

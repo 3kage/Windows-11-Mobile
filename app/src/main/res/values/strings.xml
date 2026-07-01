@@ -3,6 +3,7 @@
     <string name="app_name">Windows 11 Mobile</string>
     <string name="initialize_windows">Ініціалізувати Windows 11</string>
     <string name="initializing_windows">Ініціалізація…</string>
+    <string name="open_touch_display">Сенсорний екран Windows</string>
     <string name="launch_windows">Запустити Windows 11</string>
     <string name="terminal_log">Лог терміналу</string>
     <string name="terminal_log_hint">Логи з\'являться тут під час ініціалізації…</string>

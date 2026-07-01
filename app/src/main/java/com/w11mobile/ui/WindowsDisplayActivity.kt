@@ -1,5 +1,6 @@
 package com.w11mobile.ui
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -20,6 +21,12 @@ class WindowsDisplayActivity : AppCompatActivity() {
     private val viewModel: WindowsDisplayViewModel by viewModels()
     private var vncClient: MinimalVncClient? = null
     private var connectJob: Job? = null
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        viewModel.configure(intent.getBooleanExtra(EXTRA_SHOW_BOOT_OVERLAY, false))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

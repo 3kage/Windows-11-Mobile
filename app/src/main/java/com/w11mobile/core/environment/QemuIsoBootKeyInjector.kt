@@ -19,7 +19,7 @@ class QemuIsoBootKeyInjector {
                         if (keySent) {
                             return@Thread
                         }
-                        if (QemuMonitorClient.sendKey()) {
+                        if (QemuMonitorClient.sendKeyWithRetries(maxAttempts = 3, retryDelayMs = 500L)) {
                             keySent = true
                             return@Thread
                         }
@@ -40,7 +40,7 @@ class QemuIsoBootKeyInjector {
         if (keySent || !looksLikePressAnyKeyPrompt(line)) {
             return
         }
-        if (QemuMonitorClient.sendKey()) {
+        if (QemuMonitorClient.sendKeyWithRetries(maxAttempts = 5, retryDelayMs = 200L)) {
             keySent = true
         }
     }
@@ -59,7 +59,7 @@ class QemuIsoBootKeyInjector {
     }
 
     companion object {
-        private const val INITIAL_DELAY_MS = 6_000L
+        private const val INITIAL_DELAY_MS = 3_000L
         private const val RETRY_INTERVAL_MS = 2_000L
         private const val MAX_ATTEMPTS = 8
     }

@@ -4,12 +4,10 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.w11mobile.core.environment.QemuNativeLauncher
+import com.w11mobile.core.environment.QemuMonitorClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.PrintWriter
-import java.net.Socket
 
 class WindowsDisplayViewModel : ViewModel() {
 
@@ -26,19 +24,13 @@ class WindowsDisplayViewModel : ViewModel() {
 
     fun sendAnyKeyToQemu() {
         viewModelScope.launch(Dispatchers.IO) {
-            try {
-                Socket(QemuNativeLauncher.MONITOR_HOST, QemuNativeLauncher.MONITOR_PORT).use { socket ->
-                    val writer = PrintWriter(socket.getOutputStream(), true)
-                    writer.println("sendkey spc")
-                }
-                withContext(Dispatchers.Main) {
+            val sent = QemuMonitorClient.sendKeyWithRetries()
+            withContext(Dispatchers.Main) {
+                if (sent) {
                     _bootOverlayVisible.value = false
                     _monitorError.value = null
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                withContext(Dispatchers.Main) {
-                    _monitorError.value = e.message ?: "QEMU monitor error"
+                } else {
+                    _monitorError.value = "Не вдалося підключитися до QEMU monitor (127.0.0.1:4444)"
                 }
             }
         }

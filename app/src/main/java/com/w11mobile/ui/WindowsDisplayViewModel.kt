@@ -17,9 +17,17 @@ class WindowsDisplayViewModel : ViewModel() {
     private val _monitorError = MutableLiveData<String?>(null)
     val monitorError: LiveData<String?> = _monitorError
 
+    private val _vncConnected = MutableLiveData(false)
+    val vncConnected: LiveData<Boolean> = _vncConnected
+
     fun configure(showBootOverlay: Boolean) {
         _bootOverlayVisible.value = showBootOverlay
         _monitorError.value = null
+        _vncConnected.value = false
+    }
+
+    fun onVncConnected() {
+        _vncConnected.value = true
     }
 
     fun sendAnyKeyToQemu() {
@@ -27,8 +35,10 @@ class WindowsDisplayViewModel : ViewModel() {
             val sent = QemuMonitorClient.sendKeyWithRetries()
             withContext(Dispatchers.Main) {
                 if (sent) {
-                    _bootOverlayVisible.value = false
                     _monitorError.value = null
+                    if (_vncConnected.value == true) {
+                        _bootOverlayVisible.value = false
+                    }
                 } else {
                     _monitorError.value = "Не вдалося підключитися до QEMU monitor (127.0.0.1:4444)"
                 }

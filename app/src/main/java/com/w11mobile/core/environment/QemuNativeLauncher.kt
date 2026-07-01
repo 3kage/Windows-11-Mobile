@@ -5,7 +5,8 @@ import java.io.File
 
 object QemuNativeLauncher {
     const val LINKER64 = "/system/bin/linker64"
-    const val VNC_BIND = "127.0.0.1:0"
+    /** QEMU VNC display :0 → TCP 5900 (no comma options — libqemu misparses commas). */
+    const val VNC_DISPLAY = "vnc=127.0.0.1:0"
     const val VNC_HOST = "127.0.0.1"
     /** QEMU VNC display :0 → TCP 5900 */
     const val VNC_PORT = 5900
@@ -57,7 +58,7 @@ object QemuNativeLauncher {
                 add("-device")
                 add("virtio-blk-pci,drive=windisk,bootindex=2,romfile=$virtioRom")
             }
-            addUsbInputAndVnc()
+            addUsbInputAndVncDisplay()
             add("-monitor")
             add("tcp:$MONITOR_HOST:$MONITOR_PORT,server,nowait")
             add("-serial")
@@ -91,19 +92,21 @@ object QemuNativeLauncher {
             add("file=${diskFile.absolutePath},if=none,format=qcow2,id=windisk")
             add("-device")
             add("virtio-blk-pci,drive=windisk,bootindex=1,romfile=$virtioRom")
-            addUsbInputAndVnc()
+            addUsbInputAndVncDisplay()
             add("-serial")
             add("stdio")
             add("-no-reboot")
         }
     }
 
-    private fun MutableList<String>.addUsbInputAndVnc() {
+    private fun MutableList<String>.addUsbInputAndVncDisplay() {
+        add("-device")
+        add("virtio-gpu-pci")
         add("-device")
         add("usb-kbd,bus=usbctrl.0")
         add("-device")
         add("usb-tablet,bus=usbctrl.0")
-        add("-vnc")
-        add(VNC_BIND)
+        add("-display")
+        add(VNC_DISPLAY)
     }
 }

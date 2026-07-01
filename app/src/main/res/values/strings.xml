@@ -23,7 +23,7 @@
     <string name="windows_display_connecting_attempt">Підключення до VNC… (спроба %1$d)</string>
     <string name="windows_display_connected">Сенсорний екран активний</string>
     <string name="windows_display_disconnected">VNC відключено</string>
-    <string name="windows_display_connect_failed">Не вдалося підключитися до VNC. Перевірте, що Windows запущено.</string>
+    <string name="windows_display_connect_failed">Не вдалося підключитися до VNC на 127.0.0.1:5900. Перезапустіть Windows.</string>
     <string name="windows_display_boot_overlay_title">Завантаження Windows ISO</string>
     <string name="windows_display_boot_overlay_hint">Торкніться «Будь-яка клавіша» для завантаження ISO</string>
     <string name="windows_display_monitor_error">QEMU monitor: %1$s</string>

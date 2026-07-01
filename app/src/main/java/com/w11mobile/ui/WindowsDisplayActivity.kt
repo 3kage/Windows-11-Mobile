@@ -8,6 +8,7 @@ import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import com.w11mobile.databinding.ActivityWindowsDisplayBinding
 import com.w11mobile.vnc.MinimalVncClient
+import com.w11mobile.vnc.VncPortProbe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -81,12 +82,18 @@ class WindowsDisplayActivity : AppCompatActivity() {
             var attempt = 0
             while (isActive && attempt < MAX_CONNECT_ATTEMPTS) {
                 attempt += 1
-                val client = MinimalVncClient()
-                vncClient = client
                 binding.vncStatusText.text = getString(
                     com.w11mobile.R.string.windows_display_connecting_attempt,
                     attempt,
                 )
+
+                if (!withContext(Dispatchers.IO) { VncPortProbe.isOpen() }) {
+                    delay(RETRY_DELAY_MS)
+                    continue
+                }
+
+                val client = MinimalVncClient()
+                vncClient = client
                 try {
                     withContext(Dispatchers.IO) {
                         client.connect(
@@ -100,6 +107,7 @@ class WindowsDisplayActivity : AppCompatActivity() {
                                 override fun onFrame(bitmap: android.graphics.Bitmap) {
                                     runOnUiThread {
                                         binding.vncFrameView.updateFrame(bitmap)
+                                        viewModel.onVncConnected()
                                         if (viewModel.bootOverlayVisible.value != true) {
                                             binding.vncStatusText.text =
                                                 getString(com.w11mobile.R.string.windows_display_connected)

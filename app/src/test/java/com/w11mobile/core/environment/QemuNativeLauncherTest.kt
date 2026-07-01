@@ -39,17 +39,18 @@ class QemuNativeLauncherTest {
         assertTrue(args.contains("usb-storage,bus=usbctrl.0,drive=winiso,bootindex=1,removable=on"))
         assertTrue(args.contains("file=${disk.absolutePath},if=none,format=qcow2,id=windisk"))
         assertTrue(args.contains("virtio-blk-pci,drive=windisk,bootindex=2,romfile=${File(romDir, "efi-virtio.rom").absolutePath}"))
+        assertTrue(args.contains("virtio-gpu-pci"))
         assertTrue(args.contains("usb-kbd,bus=usbctrl.0"))
         assertTrue(args.contains("usb-tablet,bus=usbctrl.0"))
-        assertTrue(args.contains("-vnc"))
-        assertTrue(args.contains(QemuNativeLauncher.VNC_BIND))
+        assertTrue(args.contains("-display"))
+        assertTrue(args.contains(QemuNativeLauncher.VNC_DISPLAY))
+        assertFalse(args.contains("-vnc"))
         assertTrue(args.contains("-monitor"))
         assertTrue(args.contains("tcp:${QemuNativeLauncher.MONITOR_HOST}:${QemuNativeLauncher.MONITOR_PORT},server,nowait"))
         assertTrue(args.contains("stdio"))
         assertFalse(args.contains("mon:stdio"))
-        assertFalse(args.contains("-display"))
         assertFalse(args.contains("-cdrom"))
-        assertFalse(args.contains("none"))
+        assertFalse(args.any { it == "-display none" || it == "none" })
     }
 
     @Test
@@ -61,13 +62,14 @@ class QemuNativeLauncherTest {
         val args = QemuNativeLauncher.buildArm64Qcow2Arguments(uefi, disk, romDir)
 
         assertTrue(args.contains("qemu-xhci,id=usbctrl"))
+        assertTrue(args.contains("virtio-gpu-pci"))
         assertTrue(args.contains("usb-kbd,bus=usbctrl.0"))
         assertTrue(args.contains("usb-tablet,bus=usbctrl.0"))
-        assertTrue(args.contains("-vnc"))
-        assertTrue(args.contains(QemuNativeLauncher.VNC_BIND))
+        assertTrue(args.contains("-display"))
+        assertTrue(args.contains(QemuNativeLauncher.VNC_DISPLAY))
+        assertFalse(args.contains("-vnc"))
         assertFalse(args.contains("-monitor"))
-        assertFalse(args.contains("-display"))
-        assertFalse(args.any { it == "none" })
+        assertFalse(args.any { it == "-display none" || it == "none" })
     }
 
     @Test

@@ -4,7 +4,9 @@ Android-додаток для запуску Windows 11 у user-space (PRoot + Q
 
 ## Останній реліз
 
-**v1.3.3:** https://github.com/3kage/Windows-11-Mobile/releases/latest
+**v1.7.8:** https://github.com/3kage/Windows-11-Mobile/releases/latest
+
+Завантажуйте файл **`.apk`** з розділу **Assets** на сторінці релізу — це прямий APK, без zip-архіву.
 
 ## Встановлення / оновлення
 
@@ -32,7 +34,22 @@ Android-додаток для запуску Windows 11 у user-space (PRoot + Q
 ## Збірка
 
 ```bash
+./gradlew buildApk
+```
+
+Готовий APK (не zip):
+
+`build/dist/windows11-mobile-<версія>-debug.apk`
+
+Альтернатива без копіювання:
+
+```bash
 ./gradlew assembleDebug
 ```
 
 APK: `app/build/outputs/apk/debug/app-debug.apk`
+
+### CI та GitHub Actions
+
+- **Releases** — завантаження `.apk` напряму з Assets (workflow `android-release.yml`, тег `v*`).
+- **Actions artifacts** — GitHub завжди пакує артефакт у zip при завантаженні; всередині zip лежить один файл `.apk` з `build/dist/`.

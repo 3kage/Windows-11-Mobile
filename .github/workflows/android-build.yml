@@ -48,13 +48,14 @@ jobs:
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+      - name: Build and export debug APK
+        run: ./gradlew exportDebugApk --no-daemon --stacktrace
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: windows11-mobile-debug-apk
+          path: build/dist/*.apk
+          compression-level: 0
           if-no-files-found: error
           retention-days: 14

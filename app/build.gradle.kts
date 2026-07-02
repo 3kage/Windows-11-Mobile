@@ -400,3 +400,47 @@ tasks.named("preBuild") {
         "prepareUefiFirmware",
     )
 }
+
+val apkExportDir = rootProject.layout.buildDirectory.dir("dist")
+
+fun registerApkExportTask(
+    taskName: String,
+    assembleTaskName: String,
+    buildType: String,
+    sourceApkPath: String,
+) {
+    tasks.register(taskName, Copy::class.java) {
+        group = "build"
+        description = "Copy $buildType APK to build/dist/ with a versioned filename"
+        dependsOn(assembleTaskName)
+        from(layout.buildDirectory.file(sourceApkPath))
+        into(apkExportDir)
+        rename { "windows11-mobile-${android.defaultConfig.versionName}-$buildType.apk" }
+        doLast {
+            val exported = apkExportDir.get().file(
+                "windows11-mobile-${android.defaultConfig.versionName}-$buildType.apk",
+            ).asFile
+            logger.lifecycle("Exported APK: ${exported.absolutePath}")
+        }
+    }
+}
+
+registerApkExportTask(
+    taskName = "exportDebugApk",
+    assembleTaskName = "assembleDebug",
+    buildType = "debug",
+    sourceApkPath = "outputs/apk/debug/app-debug.apk",
+)
+
+registerApkExportTask(
+    taskName = "exportReleaseApk",
+    assembleTaskName = "assembleRelease",
+    buildType = "release",
+    sourceApkPath = "outputs/apk/release/app-release.apk",
+)
+
+tasks.register("buildApk") {
+    group = "build"
+    description = "Build debug APK and export a versioned .apk file to build/dist/"
+    dependsOn("exportDebugApk")
+}

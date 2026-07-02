@@ -48,8 +48,14 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build and export debug APK
-        run: ./gradlew exportDebugApk --no-daemon --stacktrace
+      - name: Build, export and verify release APK
+        run: ./gradlew buildApk --no-daemon --stacktrace
+
+      - name: Print APK checksum
+        run: |
+          APK=(build/dist/*.apk)
+          ls -lh "${APK[@]}"
+          sha256sum "${APK[@]}"
 
       - name: Resolve release tag
         id: release_tag

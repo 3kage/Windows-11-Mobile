@@ -1,4 +1,5 @@
 import java.net.URI
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -21,8 +22,8 @@ android {
         applicationId = "com.w11mobile.windows11"
         minSdk = 24
         targetSdk = 28
-        versionCode = 37
-        versionName = "1.7.8"
+        versionCode = 38
+        versionName = "1.7.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -77,6 +78,11 @@ android {
         jniLibs {
             useLegacyPackaging = true
         }
+    }
+
+    lint {
+        // Sideload builds keep targetSdk 28 for compatibility; Play lint would block release APK export.
+        disable += "ExpiredTargetSdkVersion"
     }
 }
 
@@ -439,8 +445,42 @@ registerApkExportTask(
     sourceApkPath = "outputs/apk/release/app-release.apk",
 )
 
+val buildToolsVersion = "34.0.0"
+
+fun registerVerifyApkTask(taskName: String, buildType: String) {
+    tasks.register(taskName) {
+        group = "verification"
+        description = "Verify exported $buildType APK signature with apksigner"
+        val apkFile = apkExportDir.map {
+            it.file("windows11-mobile-${android.defaultConfig.versionName}-$buildType.apk")
+        }
+        inputs.file(apkFile)
+        dependsOn("export${buildType.replaceFirstChar { it.uppercase() }}Apk")
+        doLast {
+            val apk = apkFile.get().asFile
+            check(apk.isFile && apk.length() > 1_000_000L) {
+                "Exported APK missing or too small (${apk.absolutePath}, ${apk.length()} bytes). " +
+                    "Do not install zip archives — extract the .apk file first."
+            }
+            val apksigner = File(android.sdkDirectory, "build-tools/$buildToolsVersion/apksigner")
+            exec {
+                commandLine(apksigner.absolutePath, "verify", "--verbose", apk.absolutePath)
+            }
+            logger.lifecycle("Verified APK: ${apk.absolutePath} (${apk.length()} bytes, SHA-256 below)")
+            logger.lifecycle(
+                MessageDigest.getInstance("SHA-256")
+                    .digest(apk.readBytes())
+                    .joinToString("") { byte -> "%02x".format(byte) },
+            )
+        }
+    }
+}
+
+registerVerifyApkTask(taskName = "verifyReleaseApk", buildType = "release")
+registerVerifyApkTask(taskName = "verifyDebugApk", buildType = "debug")
+
 tasks.register("buildApk") {
     group = "build"
-    description = "Build debug APK and export a versioned .apk file to build/dist/"
-    dependsOn("exportDebugApk")
+    description = "Build release APK, export to build/dist/, and verify signature"
+    dependsOn("verifyReleaseApk")
 }

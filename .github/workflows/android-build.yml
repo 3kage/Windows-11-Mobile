@@ -48,13 +48,24 @@ jobs:
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
-      - name: Build and export debug APK
-        run: ./gradlew exportDebugApk --no-daemon --stacktrace
+      - name: Build, export and verify release APK
+        run: ./gradlew buildApk --no-daemon --stacktrace
 
-      - name: Upload debug APK
+      - name: Print APK checksum
+        run: |
+          APK=(build/dist/*.apk)
+          ls -lh "${APK[@]}"
+          sha256sum "${APK[@]}"
+          echo "### Install this file (not the .zip wrapper)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **File:** \`${APK[0]##*/}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Size:** $(stat -c%s "${APK[0]}") bytes" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **SHA-256:** \`$(sha256sum "${APK[0]}" | awk '{print $1}')\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Important:** If you downloaded from Actions, unzip first — install the \`.apk\`, not the artifact \`.zip\`." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
-          name: windows11-mobile-debug-apk
+          name: windows11-mobile-release-apk
           path: build/dist/*.apk
           compression-level: 0
           if-no-files-found: error

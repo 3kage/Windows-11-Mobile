@@ -21,19 +21,15 @@ class WindowsIsoValidatorTest {
     }
 
     @Test
-    fun validate_acceptsBootableIsoHeader() {
-        val file = File.createTempFile("win11", ".iso").apply {
-            RandomAccessFile(this, "rw").use { raf ->
-                raf.setLength(4L * 1024 * 1024 * 1024)
-                val sector = ByteArray(512)
-                "CD001".toByteArray().copyInto(sector, destinationOffset = 0x40)
-                raf.write(sector)
-            }
+    fun validate_acceptsLargeFileWithoutCd001() {
+        val file = File.createTempFile("win11-udf", ".iso").apply {
+            RandomAccessFile(this, "rw").use { it.setLength(4L * 1024 * 1024 * 1024) }
             deleteOnExit()
         }
 
         val result = WindowsIsoValidator.validate(file)
 
         assertTrue(result.ok)
+        assertTrue(result.message.contains("ISO готовий"))
     }
 }

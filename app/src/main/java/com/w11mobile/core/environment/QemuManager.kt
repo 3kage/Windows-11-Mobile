@@ -116,6 +116,10 @@ class QemuManager(
         ensureQemuRomFiles(onLine)
 
         if (config.bootMode == WindowsBootMode.ISO) {
+            val isoCheck = WindowsIsoValidator.validate(paths.windowsIso)
+            onLine(">>> ${isoCheck.message}\n")
+            require(isoCheck.ok) { isoCheck.message }
+
             val diskResult = createInstallDiskIfNeeded { line -> onLine("$line\n") }
             if (diskResult.exitCode != 0 && diskResult.command != "skip") {
                 return diskResult

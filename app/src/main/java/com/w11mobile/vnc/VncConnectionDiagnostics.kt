@@ -2,6 +2,7 @@ package com.w11mobile.vnc
 
 import android.util.Log
 import com.w11mobile.core.environment.QemuNativeLauncher
+import java.io.BufferedInputStream
 import java.net.ConnectException
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -15,6 +16,7 @@ object VncConnectionDiagnostics {
         val host: String,
         val port: Int,
         val open: Boolean,
+        val rfbReady: Boolean = false,
         val error: Throwable? = null,
     )
 
@@ -22,6 +24,15 @@ object VncConnectionDiagnostics {
         host: String = QemuNativeLauncher.VNC_HOST,
         port: Int = QemuNativeLauncher.VNC_PORT,
         timeoutMs: Int = 500,
+    ): ProbeResult = probeRfb(host, port, timeoutMs)
+
+    /**
+     * Verifies TCP + RFB banner without leaving a half-open client that races the real session.
+     */
+    fun probeRfb(
+        host: String = QemuNativeLauncher.VNC_HOST,
+        port: Int = QemuNativeLauncher.VNC_PORT,
+        timeoutMs: Int = 1500,
     ): ProbeResult {
         require(host == QemuNativeLauncher.VNC_HOST) {
             "VNC must use explicit IPv4 loopback, not hostname aliases"
@@ -29,11 +40,28 @@ object VncConnectionDiagnostics {
         return try {
             Socket().use { socket ->
                 socket.connect(InetSocketAddress(host, port), timeoutMs)
-                ProbeResult(host = host, port = port, open = true)
+                socket.tcpNoDelay = true
+                socket.soTimeout = timeoutMs
+                val input = BufferedInputStream(socket.getInputStream())
+                val bannerBytes = ByteArray(4)
+                val read = input.read(bannerBytes)
+                val banner = if (read > 0) String(bannerBytes, 0, read) else ""
+                val rfbReady = banner.startsWith("RFB ")
+                if (!rfbReady) {
+                    ProbeResult(
+                        host = host,
+                        port = port,
+                        open = true,
+                        rfbReady = false,
+                        error = IllegalStateException("Unexpected VNC banner: ${banner.ifEmpty { "(empty)" }}"),
+                    )
+                } else {
+                    ProbeResult(host = host, port = port, open = true, rfbReady = true)
+                }
             }
         } catch (error: Exception) {
-            logSocketFailure("port probe", host, port, error)
-            ProbeResult(host = host, port = port, open = false, error = error)
+            logSocketFailure("RFB probe", host, port, error)
+            ProbeResult(host = host, port = port, open = false, rfbReady = false, error = error)
         }
     }
 

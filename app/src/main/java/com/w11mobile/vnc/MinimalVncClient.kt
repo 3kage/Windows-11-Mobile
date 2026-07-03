@@ -372,7 +372,7 @@ class MinimalVncClient(
         private const val SERVER_BELL = 2
         private const val SERVER_CUT_TEXT = 3
         private const val ENCODING_RAW = 0
-        private const val CONNECT_TIMEOUT_MS = 3_000
+        private const val CONNECT_TIMEOUT_MS = 5_000
         private const val READ_TIMEOUT_MS = 30_000
 
         private fun encryptVncPassword(password: String, challenge: ByteArray): ByteArray {

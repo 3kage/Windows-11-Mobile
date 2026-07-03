@@ -1,6 +1,9 @@
 package com.w11mobile.vnc
 
 import com.w11mobile.core.environment.QemuNativeLauncher
+import java.io.BufferedInputStream
+import java.net.InetSocketAddress
+import java.net.Socket
 
 object VncPortProbe {
     fun isOpen(
@@ -14,5 +17,5 @@ object VncPortProbe {
         port: Int = QemuNativeLauncher.VNC_PORT,
         timeoutMs: Int = 500,
     ): VncConnectionDiagnostics.ProbeResult =
-        VncConnectionDiagnostics.probePort(host, port, timeoutMs)
+        VncConnectionDiagnostics.probeRfb(host, port, timeoutMs)
 }

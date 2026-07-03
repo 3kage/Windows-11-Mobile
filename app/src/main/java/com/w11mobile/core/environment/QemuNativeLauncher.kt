@@ -33,6 +33,9 @@ object QemuNativeLauncher {
         installDisk: File? = null,
     ): List<String> {
         val virtioRom = File(qemuShareDir, VIRTIO_ROM).absolutePath
+        val isoDrive =
+            "file=${isoFile.absolutePath},if=none,id=winiso,media=cdrom,format=raw," +
+                "readonly=on,cache=unsafe,aio=threads"
         return buildList {
             add("-L")
             add(qemuShareDir.absolutePath)
@@ -41,26 +44,33 @@ object QemuNativeLauncher {
             add("-cpu")
             add("max")
             add("-smp")
-            add("4")
+            add("2")
             add("-m")
             add("4096")
             add("-bios")
             add(uefiFirmware.absolutePath)
+            add("-object")
+            add("iothread,id=winio")
             add("-device")
             add("qemu-xhci,id=usbctrl")
             add("-drive")
-            add(
-                "file=${isoFile.absolutePath},if=none,id=winiso,media=cdrom,format=raw," +
-                    "readonly=on,cache=unsafe",
-            )
+            add(isoDrive)
             add("-device")
-            add("virtio-blk-pci,drive=winiso,bootindex=1")
+            add("virtio-blk-pci,drive=winiso,bootindex=1,iothread=winio")
             if (installDisk != null && installDisk.exists()) {
                 add("-drive")
-                add("file=${installDisk.absolutePath},if=none,format=qcow2,id=windisk")
+                add(
+                    "file=${installDisk.absolutePath},if=none,format=qcow2,id=windisk," +
+                        "cache=unsafe,aio=threads",
+                )
+                // Data disk for the installer — no bootindex so UEFI only boots the ISO.
                 add("-device")
-                add("virtio-blk-pci,drive=windisk,bootindex=2,romfile=$virtioRom")
+                add("virtio-blk-pci,drive=windisk,romfile=$virtioRom,iothread=winio")
             }
+            add("-boot")
+            add("order=c,menu=on,splash-time=60000")
+            add("-fw_cfg")
+            add("name=opt/org.tianocore/WaitForVMBootTimeout,string=60000000000")
             addUsbInputAndVncDisplay()
             add("-monitor")
             add("tcp:$MONITOR_HOST:$MONITOR_PORT,server,nowait")

@@ -46,7 +46,7 @@ class QemuIsoBootKeyInjector {
         if (looksLikeIsoBootFailure(line)) {
             isoBootFailed = true
             QemuRuntimeEvents.publishStatus(
-                "ISO не завантажився (UEFI timeout). Перезапустіть Windows або перевірте ARM64 ISO.",
+                "ISO не завантажився (UEFI timeout). Перевірте повний Win11 ARM64 ISO (>5 GB), не x86.",
             )
             return
         }

@@ -7,6 +7,7 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
+import com.w11mobile.core.environment.QemuNativeLauncher
 import com.w11mobile.core.environment.QemuProcessSession
 import com.w11mobile.core.environment.QemuRuntimeEvents
 import com.w11mobile.databinding.ActivityWindowsDisplayBinding
@@ -105,21 +106,22 @@ class WindowsDisplayActivity : AppCompatActivity() {
                 }
 
                 val probe = withContext(Dispatchers.IO) { VncPortProbe.probe() }
-                if (!probe.open) {
+                if (!probe.rfbReady) {
                     if (attempt == 1 || attempt % 5 == 0) {
+                        val detail = probe.error?.message ?: "VNC сервер ще не готовий"
                         QemuRuntimeEvents.publishStatus(
-                            "VNC 127.0.0.1:5900 ще не відкритий (спроба $attempt/$MAX_CONNECT_ATTEMPTS). " +
-                                "UEFI-текст у логу — це не екран Windows; чекайте сенсорний дисплей.",
+                            "VNC $detail (спроба $attempt/$MAX_CONNECT_ATTEMPTS). " +
+                                "UEFI-текст у логу — не екран Windows.",
                         )
                     }
                     delay(RETRY_DELAY_MS)
                     continue
                 }
 
-                QemuRuntimeEvents.publishStatus("VNC порт 5900 відкритий, підключення RFB…")
-                delay(RFB_STABILIZE_DELAY_MS)
-
-                val client = MinimalVncClient()
+                val client = MinimalVncClient(
+                    host = QemuNativeLauncher.VNC_HOST,
+                    port = QemuNativeLauncher.VNC_PORT,
+                )
                 vncClient = client
                 try {
                     withContext(Dispatchers.IO) {
@@ -167,7 +169,9 @@ class WindowsDisplayActivity : AppCompatActivity() {
                     )
                     if (attempt == 1 || attempt % 5 == 0) {
                         QemuRuntimeEvents.publishStatus(
-                            "VNC RFB помилка (спроба $attempt): ${error.javaClass.simpleName}: ${error.message}",
+                            "VNC RFB помилка на ${QemuNativeLauncher.VNC_HOST}:" +
+                                "${QemuNativeLauncher.VNC_PORT} (спроба $attempt): " +
+                                "${error.javaClass.simpleName}: ${error.message}",
                         )
                     }
                     client.close()
@@ -200,8 +204,7 @@ class WindowsDisplayActivity : AppCompatActivity() {
 
         const val EXTRA_SHOW_BOOT_OVERLAY = "show_boot_overlay"
 
-        private const val MAX_CONNECT_ATTEMPTS = 45
-        private const val RETRY_DELAY_MS = 1_000L
-        private const val RFB_STABILIZE_DELAY_MS = 400L
+        private const val MAX_CONNECT_ATTEMPTS = 60
+        private const val RETRY_DELAY_MS = 1_500L
     }
 }

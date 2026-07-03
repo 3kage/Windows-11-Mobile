@@ -4,9 +4,22 @@ Android-додаток для запуску Windows 11 у user-space (PRoot + Q
 
 ## Останній реліз
 
-**v1.3.3:** https://github.com/3kage/Windows-11-Mobile/releases/latest
+**v1.7.9:** https://github.com/3kage/Windows-11-Mobile/releases/latest
+
+Завантажуйте файл **`.apk`** з розділу **Assets** на сторінці релізу — це прямий APK, без zip-архіву.
 
 ## Встановлення / оновлення
+
+### Якщо пише «Додаток не встановлено» / «Пакет недійсний»
+
+Найчастіша причина — встановлюють **zip-архів** замість **apk-файла**.
+
+1. Завантажте артефакт з GitHub Actions або APK з Releases.
+2. Якщо файл має розширення **`.zip`** — **розпакуйте** його (Files, ZArchiver, RAR тощо).
+3. Встановлюйте файл **`windows11-mobile-…-release.apk`** (або `-debug.apk`), розмір близько **16 МБ**.
+4. Не встановлюйте через Telegram/WhatsApp, якщо месенджер перейменував або пошкодив файл — скопіюйте APK на телефон через USB або Google Drive.
+5. Увімкніть **«Встановлення невідомих додатків»** для браузера або файлового менеджера (Налаштування → Безпека / Додатки).
+6. Потрібен телефон **ARM64** (64-bit) з **Android 7.0+** (API 24). На 32-bit пристроях APK не встановиться.
 
 ### Якщо встановлення каже «конфліктує з наявним пакетом»
 
@@ -32,7 +45,22 @@ Android-додаток для запуску Windows 11 у user-space (PRoot + Q
 ## Збірка
 
 ```bash
+./gradlew buildApk
+```
+
+Готовий APK (не zip):
+
+`build/dist/windows11-mobile-<версія>-release.apk`
+
+Альтернатива без копіювання:
+
+```bash
 ./gradlew assembleDebug
 ```
 
 APK: `app/build/outputs/apk/debug/app-debug.apk`
+
+### CI та GitHub Actions
+
+- **Releases** — завантаження `.apk` напряму з Assets (workflow `android-release.yml`, тег `v*`).
+- **Actions artifacts** — GitHub завжди пакує артефакт у zip при завантаженні; всередині zip лежить один файл `.apk` з `build/dist/`.

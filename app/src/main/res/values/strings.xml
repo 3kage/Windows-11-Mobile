@@ -3,6 +3,7 @@
     <string name="app_name">Windows 11 Mobile</string>
     <string name="initialize_windows">Ініціалізувати Windows 11</string>
     <string name="initializing_windows">Ініціалізація…</string>
+    <string name="open_touch_display">Сенсорний екран Windows</string>
     <string name="launch_windows">Запустити Windows 11</string>
     <string name="terminal_log">Лог терміналу</string>
     <string name="terminal_log_hint">Логи з\'являться тут під час ініціалізації…</string>
@@ -18,4 +19,16 @@
     <string name="local_image_not_selected">Файл не обрано</string>
     <string name="status_idle">Очікування</string>
     <string name="progress_percent">%1$d%%</string>
+    <string name="windows_display_connecting">Підключення до Windows…</string>
+    <string name="windows_display_connecting_attempt">Підключення до VNC… (спроба %1$d)</string>
+    <string name="windows_display_connected">Сенсорний екран активний</string>
+    <string name="windows_display_disconnected">VNC відключено</string>
+    <string name="windows_display_qemu_died">Помилка: Процес QEMU несподівано завершився з кодом %1$d</string>
+    <string name="windows_display_connect_failed">Не вдалося підключитися до VNC на 127.0.0.1:5900. Перевірте Logcat (тег VncConnection).</string>
+    <string name="windows_display_boot_overlay_title">Завантаження Windows ISO</string>
+    <string name="windows_display_boot_overlay_hint">Торкніться «Будь-яка клавіша» для завантаження ISO</string>
+    <string name="windows_display_monitor_error">QEMU monitor: %1$s</string>
+    <string name="windows_display_touch_hint">Торкайтеся екрана як миші.</string>
+    <string name="windows_display_any_key">Будь-яка клавіша</string>
+    <string name="windows_display_back_to_log">Повернутися до логу</string>
 </resources>

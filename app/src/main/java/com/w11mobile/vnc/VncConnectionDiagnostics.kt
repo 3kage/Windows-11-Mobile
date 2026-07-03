@@ -1,7 +1,7 @@
 package com.w11mobile.vnc
 
 import android.util.Log
-import com.w11mobile.core.environment.QemuNativeLauncher
+import com.w11mobile.vnc.VncEndpoint
 import java.io.BufferedInputStream
 import java.net.ConnectException
 import java.net.InetSocketAddress
@@ -21,8 +21,8 @@ object VncConnectionDiagnostics {
     )
 
     fun probePort(
-        host: String = QemuNativeLauncher.VNC_HOST,
-        port: Int = QemuNativeLauncher.VNC_PORT,
+        host: String = VncEndpoint.HOST,
+        port: Int = VncEndpoint.TCP_PORT,
         timeoutMs: Int = 500,
     ): ProbeResult = probeRfb(host, port, timeoutMs)
 
@@ -30,11 +30,11 @@ object VncConnectionDiagnostics {
      * Verifies TCP + RFB banner without leaving a half-open client that races the real session.
      */
     fun probeRfb(
-        host: String = QemuNativeLauncher.VNC_HOST,
-        port: Int = QemuNativeLauncher.VNC_PORT,
+        host: String = VncEndpoint.HOST,
+        port: Int = VncEndpoint.TCP_PORT,
         timeoutMs: Int = 1500,
     ): ProbeResult {
-        require(host == QemuNativeLauncher.VNC_HOST) {
+        require(host == VncEndpoint.HOST) {
             "VNC must use explicit IPv4 loopback, not hostname aliases"
         }
         return try {

@@ -37,7 +37,12 @@ object QemuMonitorClient {
         return false
     }
 
-    private fun sendKeyOnce(host: String, port: Int, key: String): Boolean {
+    /** Sends a raw HMP line (e.g. `sendkey spc`) to the QEMU monitor socket. */
+    fun sendRawMonitorCommand(
+        command: String,
+        host: String = QemuNativeLauncher.MONITOR_HOST,
+        port: Int = QemuNativeLauncher.MONITOR_PORT,
+    ): Boolean {
         return try {
             Socket().use { socket ->
                 socket.connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS)
@@ -45,7 +50,8 @@ object QemuMonitorClient {
                 val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
                 val writer = PrintWriter(socket.getOutputStream(), true)
                 drainMonitorBanner(reader)
-                writer.println("sendkey $key")
+                val line = command.trimEnd('\n', '\r')
+                writer.println(line)
                 writer.flush()
                 drainMonitorBanner(reader)
                 true
@@ -53,6 +59,10 @@ object QemuMonitorClient {
         } catch (_: Exception) {
             false
         }
+    }
+
+    private fun sendKeyOnce(host: String, port: Int, key: String): Boolean {
+        return sendRawMonitorCommand("sendkey $key", host, port)
     }
 
     private fun drainMonitorBanner(reader: BufferedReader) {

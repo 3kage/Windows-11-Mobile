@@ -139,7 +139,7 @@ class QemuManager(
         QemuProcessSession.markLaunchStarting()
 
         val isoBootKeyInjector = if (config.bootMode == WindowsBootMode.ISO) {
-            QemuIsoBootKeyInjector().also { it.onBootStarted() }
+            QemuIsoBootKeyInjector()
         } else {
             null
         }

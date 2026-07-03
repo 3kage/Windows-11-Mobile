@@ -7,12 +7,12 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
-import com.w11mobile.core.environment.QemuNativeLauncher
 import com.w11mobile.core.environment.QemuProcessSession
 import com.w11mobile.core.environment.QemuRuntimeEvents
 import com.w11mobile.databinding.ActivityWindowsDisplayBinding
 import com.w11mobile.vnc.MinimalVncClient
 import com.w11mobile.vnc.VncConnectionDiagnostics
+import com.w11mobile.vnc.VncEndpoint
 import com.w11mobile.vnc.VncPortProbe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -119,8 +119,8 @@ class WindowsDisplayActivity : AppCompatActivity() {
                 }
 
                 val client = MinimalVncClient(
-                    host = QemuNativeLauncher.VNC_HOST,
-                    port = QemuNativeLauncher.VNC_PORT,
+                    host = VncEndpoint.HOST,
+                    port = VncEndpoint.TCP_PORT,
                 )
                 vncClient = client
                 try {
@@ -169,8 +169,7 @@ class WindowsDisplayActivity : AppCompatActivity() {
                     )
                     if (attempt == 1 || attempt % 5 == 0) {
                         QemuRuntimeEvents.publishStatus(
-                            "VNC RFB помилка на ${QemuNativeLauncher.VNC_HOST}:" +
-                                "${QemuNativeLauncher.VNC_PORT} (спроба $attempt): " +
+                            "VNC RFB помилка на ${VncEndpoint.HOST}:${VncEndpoint.TCP_PORT} (спроба $attempt): " +
                                 "${error.javaClass.simpleName}: ${error.message}",
                         )
                     }

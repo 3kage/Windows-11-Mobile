@@ -5,11 +5,14 @@ import java.io.File
 
 object QemuNativeLauncher {
     const val LINKER64 = "/system/bin/linker64"
-    /** QEMU VNC display :0 → TCP 5900 (no comma options — libqemu misparses commas). */
-    const val VNC_DISPLAY = "vnc=127.0.0.1:0"
+    /** QEMU VNC display index (:0) — not the TCP port. */
+    const val VNC_DISPLAY_INDEX = 0
+    /** TCP port for [VNC_DISPLAY] index :0 — always 5900, never the display index. */
+    const val VNC_TCP_PORT = 5900
+    /** @see VNC_TCP_PORT */
+    const val VNC_PORT = VNC_TCP_PORT
     const val VNC_HOST = "127.0.0.1"
-    /** QEMU VNC display :0 → TCP 5900 */
-    const val VNC_PORT = 5900
+    const val VNC_DISPLAY = "vnc=$VNC_HOST:$VNC_DISPLAY_INDEX"
     const val MONITOR_HOST = "127.0.0.1"
     const val MONITOR_PORT = 4444
 

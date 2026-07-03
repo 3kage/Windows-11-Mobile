@@ -3,6 +3,7 @@ package com.w11mobile.vnc
 import android.graphics.Bitmap
 import android.util.Log
 import com.w11mobile.core.environment.QemuNativeLauncher
+import com.w11mobile.vnc.VncEndpoint
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.EOFException
@@ -41,14 +42,16 @@ class MinimalVncClient(
     private var blueShift = 0
 
     fun connect(listener: FrameListener) {
+        val connectHost = VncEndpoint.HOST
+        val connectPort = VncEndpoint.socketPort(port)
         try {
             socket = Socket().apply {
-                connect(InetSocketAddress(host, port), CONNECT_TIMEOUT_MS)
+                connect(InetSocketAddress(connectHost, connectPort), CONNECT_TIMEOUT_MS)
                 tcpNoDelay = true
                 soTimeout = READ_TIMEOUT_MS
             }
         } catch (error: Exception) {
-            VncConnectionDiagnostics.logSocketFailure("RFB handshake connect", host, port, error)
+            VncConnectionDiagnostics.logSocketFailure("RFB handshake connect", connectHost, connectPort, error)
             throw error
         }
         input = DataInputStream(socket!!.getInputStream())

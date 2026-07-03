@@ -1,8 +1,7 @@
 package com.w11mobile.core.environment
 
 /**
- * Windows install ISO shows "Press any key to boot from CD/DVD" for a few seconds.
- * Without a keypress UEFI times out and drops to the EFI shell.
+ * Detects Windows ISO "Press any key" prompts in QEMU serial output.
  */
 class QemuIsoBootKeyInjector {
     @Volatile
@@ -10,37 +9,6 @@ class QemuIsoBootKeyInjector {
 
     @Volatile
     private var isoBootFailed = false
-
-    private var helperThread: Thread? = null
-
-    fun onBootStarted() {
-        helperThread = Thread(
-            {
-                try {
-                    Thread.sleep(INITIAL_DELAY_MS)
-                    repeat(MAX_ATTEMPTS) {
-                        if (keySent || isoBootFailed) {
-                            return@Thread
-                        }
-                        if (QemuMonitorClient.sendKeyWithRetries(maxAttempts = 3, retryDelayMs = 500L)) {
-                            keySent = true
-                            QemuRuntimeEvents.publishStatus(
-                                "Автонатиск «Будь-яка клавіша» надіслано в QEMU monitor",
-                            )
-                            return@Thread
-                        }
-                        Thread.sleep(RETRY_INTERVAL_MS)
-                    }
-                } catch (_: InterruptedException) {
-                    // cancelled when QEMU exits
-                }
-            },
-            "qemu-iso-boot-key",
-        ).apply {
-            isDaemon = true
-            start()
-        }
-    }
 
     fun onOutputLine(line: String) {
         if (looksLikeIsoBootFailure(line)) {
@@ -62,8 +30,7 @@ class QemuIsoBootKeyInjector {
     }
 
     fun stop() {
-        helperThread?.interrupt()
-        helperThread = null
+        // no-op; kept for QemuManager lifecycle symmetry
     }
 
     internal fun looksLikeIsoBootFailure(line: String): Boolean {
@@ -93,11 +60,4 @@ class QemuIsoBootKeyInjector {
             ),
             "",
         ).replace(Regex("\\p{C}"), " ")
-
-    companion object {
-        /** Wait for virtio CD + Windows bootmgr before blind sendkey attempts. */
-        private const val INITIAL_DELAY_MS = 20_000L
-        private const val RETRY_INTERVAL_MS = 3_000L
-        private const val MAX_ATTEMPTS = 6
-    }
 }

@@ -47,6 +47,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
         }
+        QemuRuntimeEvents.onStatus = { message ->
+            appendLog(">>> $message\n")
+        }
         viewModelScope.launch(Dispatchers.IO) {
             val initialState = loadInitialUiState()
             uiStateStore.set(initialState)
@@ -226,6 +229,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         QemuRuntimeEvents.onFatalError = null
+        QemuRuntimeEvents.onStatus = null
         super.onCleared()
     }
 

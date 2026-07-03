@@ -21,6 +21,9 @@ class QemuIsoBootKeyInjector {
                         }
                         if (QemuMonitorClient.sendKeyWithRetries(maxAttempts = 3, retryDelayMs = 500L)) {
                             keySent = true
+                            QemuRuntimeEvents.publishStatus(
+                                "Автонатиск «Будь-яка клавіша» надіслано в QEMU monitor",
+                            )
                             return@Thread
                         }
                         Thread.sleep(RETRY_INTERVAL_MS)
@@ -42,6 +45,9 @@ class QemuIsoBootKeyInjector {
         }
         if (QemuMonitorClient.sendKeyWithRetries(maxAttempts = 5, retryDelayMs = 200L)) {
             keySent = true
+            QemuRuntimeEvents.publishStatus(
+                "«Будь-яка клавіша» надіслано (виявлено підказку в serial-логу)",
+            )
         }
     }
 

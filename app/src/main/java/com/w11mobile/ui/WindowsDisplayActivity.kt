@@ -106,9 +106,17 @@ class WindowsDisplayActivity : AppCompatActivity() {
 
                 val probe = withContext(Dispatchers.IO) { VncPortProbe.probe() }
                 if (!probe.open) {
+                    if (attempt == 1 || attempt % 5 == 0) {
+                        QemuRuntimeEvents.publishStatus(
+                            "VNC 127.0.0.1:5900 ще не відкритий (спроба $attempt/$MAX_CONNECT_ATTEMPTS). " +
+                                "UEFI-текст у логу — це не екран Windows; чекайте сенсорний дисплей.",
+                        )
+                    }
                     delay(RETRY_DELAY_MS)
                     continue
                 }
+
+                QemuRuntimeEvents.publishStatus("VNC порт 5900 відкритий, підключення RFB…")
 
                 val client = MinimalVncClient()
                 vncClient = client
@@ -125,7 +133,13 @@ class WindowsDisplayActivity : AppCompatActivity() {
                                 override fun onFrame(bitmap: android.graphics.Bitmap) {
                                     runOnUiThread {
                                         binding.vncFrameView.updateFrame(bitmap)
+                                        val firstFrame = viewModel.vncConnected.value != true
                                         viewModel.onVncConnected()
+                                        if (firstFrame) {
+                                            QemuRuntimeEvents.publishStatus(
+                                                "VNC підключено ${bitmap.width}x${bitmap.height} — зображення Windows на сенсорному екрані",
+                                            )
+                                        }
                                         if (viewModel.bootOverlayVisible.value != true) {
                                             binding.vncStatusText.text =
                                                 getString(com.w11mobile.R.string.windows_display_connected)

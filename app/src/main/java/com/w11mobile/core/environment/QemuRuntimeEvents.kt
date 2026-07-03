@@ -7,7 +7,14 @@ object QemuRuntimeEvents {
     @Volatile
     var onFatalError: ((String) -> Unit)? = null
 
+    @Volatile
+    var onStatus: ((String) -> Unit)? = null
+
     fun publishFatal(message: String) {
         onFatalError?.invoke(message)
+    }
+
+    fun publishStatus(message: String) {
+        onStatus?.invoke(message)
     }
 }

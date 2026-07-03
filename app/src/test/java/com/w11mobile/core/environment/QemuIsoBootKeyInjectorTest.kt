@@ -19,6 +19,20 @@ class QemuIsoBootKeyInjectorTest {
     }
 
     @Test
+    fun looksLikePressAnyKeyPrompt_ignoresEfiShellPrompt() {
+        assertFalse(injector.looksLikePressAnyKeyPrompt("Press ESC in 5 seconds to skip startup.nsh"))
+    }
+
+    @Test
+    fun looksLikeIsoBootFailure_detectsUefiTimeout() {
+        assertTrue(
+            injector.looksLikeIsoBootFailure(
+                "BdsDxe: failed to start Boot0001 \"UEFI QEMU QEMU USB HARDDRIVE 1\"",
+            ),
+        )
+    }
+
+    @Test
     fun looksLikePressAnyKeyPrompt_ignoresUnrelatedLines() {
         assertFalse(injector.looksLikePressAnyKeyPrompt("UEFI Interactive Shell v2.2"))
     }

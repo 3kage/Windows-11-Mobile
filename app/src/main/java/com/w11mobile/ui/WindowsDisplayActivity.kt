@@ -117,6 +117,7 @@ class WindowsDisplayActivity : AppCompatActivity() {
                 }
 
                 QemuRuntimeEvents.publishStatus("VNC порт 5900 відкритий, підключення RFB…")
+                delay(RFB_STABILIZE_DELAY_MS)
 
                 val client = MinimalVncClient()
                 vncClient = client
@@ -164,6 +165,11 @@ class WindowsDisplayActivity : AppCompatActivity() {
                         port = probe.port,
                         error = error,
                     )
+                    if (attempt == 1 || attempt % 5 == 0) {
+                        QemuRuntimeEvents.publishStatus(
+                            "VNC RFB помилка (спроба $attempt): ${error.javaClass.simpleName}: ${error.message}",
+                        )
+                    }
                     client.close()
                     if (vncClient === client) {
                         vncClient = null
@@ -196,5 +202,6 @@ class WindowsDisplayActivity : AppCompatActivity() {
 
         private const val MAX_CONNECT_ATTEMPTS = 45
         private const val RETRY_DELAY_MS = 1_000L
+        private const val RFB_STABILIZE_DELAY_MS = 400L
     }
 }

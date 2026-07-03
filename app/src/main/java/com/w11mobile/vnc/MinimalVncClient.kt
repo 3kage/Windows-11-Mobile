@@ -59,14 +59,26 @@ class MinimalVncClient(
         setPreferredPixelFormat()
         setEncodings(intArrayOf(ENCODING_RAW))
         running = true
-        listener.onStatus("VNC підключено ${frameWidth}x$frameHeight")
 
-        val bitmap = Bitmap.createBitmap(frameWidth, frameHeight, Bitmap.Config.ARGB_8888)
+        if (frameWidth <= 0 || frameHeight <= 0) {
+            frameWidth = DEFAULT_FRAME_WIDTH
+            frameHeight = DEFAULT_FRAME_HEIGHT
+            listener.onStatus(
+                "VNC очікує ramfb ${frameWidth}x$frameHeight (QEMU ще не повідомив розмір)",
+            )
+        } else {
+            listener.onStatus("VNC підключено ${frameWidth}x$frameHeight")
+        }
+
+        var bitmap = Bitmap.createBitmap(frameWidth, frameHeight, Bitmap.Config.ARGB_8888)
         requestFullUpdate(incremental = false)
 
         while (running) {
             when (input!!.readUnsignedByte()) {
-                SERVER_FRAMEBUFFER_UPDATE -> handleFramebufferUpdate(bitmap, listener)
+                SERVER_FRAMEBUFFER_UPDATE -> {
+                    bitmap = handleFramebufferUpdate(bitmap, listener)
+                }
+                SERVER_SET_COLOR_MAP -> skipSetColorMapEntries()
                 SERVER_BELL -> Unit
                 SERVER_CUT_TEXT -> skipCutText()
                 else -> throw IllegalStateException("Unsupported VNC server message")
@@ -230,10 +242,11 @@ class MinimalVncClient(
         out.flush()
     }
 
-    private fun handleFramebufferUpdate(bitmap: Bitmap, listener: FrameListener) {
-        val inStream = input ?: return
+    private fun handleFramebufferUpdate(bitmap: Bitmap, listener: FrameListener): Bitmap {
+        val inStream = input ?: return bitmap
         inStream.readUnsignedByte() // padding
         val rectangleCount = inStream.readUnsignedShort()
+        var workingBitmap = bitmap
         repeat(rectangleCount) {
             val x = inStream.readUnsignedShort()
             val y = inStream.readUnsignedShort()
@@ -242,13 +255,26 @@ class MinimalVncClient(
             val encoding = inStream.readInt()
             require(encoding == ENCODING_RAW) { "Unsupported VNC encoding: $encoding" }
 
+            val requiredWidth = maxOf(workingBitmap.width, x + width)
+            val requiredHeight = maxOf(workingBitmap.height, y + height)
+            if (requiredWidth > workingBitmap.width || requiredHeight > workingBitmap.height) {
+                frameWidth = requiredWidth
+                frameHeight = requiredHeight
+                workingBitmap = Bitmap.createBitmap(
+                    requiredWidth,
+                    requiredHeight,
+                    Bitmap.Config.ARGB_8888,
+                )
+            }
+
             val rowBytes = width * bytesPerPixel
             val buffer = ByteArray(rowBytes * height)
             inStream.readFully(buffer)
-            copyRawRect(bitmap, x, y, width, height, buffer)
+            copyRawRect(workingBitmap, x, y, width, height, buffer)
         }
-        listener.onFrame(bitmap)
+        listener.onFrame(workingBitmap)
         requestFullUpdate(incremental = true)
+        return workingBitmap
     }
 
     private fun copyRawRect(
@@ -294,6 +320,14 @@ class MinimalVncClient(
         }
     }
 
+    private fun skipSetColorMapEntries() {
+        val inStream = input ?: return
+        inStream.readUnsignedByte() // padding
+        inStream.readUnsignedShort() // first color
+        val count = inStream.readUnsignedShort()
+        inStream.readFully(ByteArray(count * 6))
+    }
+
     private fun skipCutText() {
         val inStream = input ?: return
         inStream.readUnsignedByte()
@@ -323,6 +357,8 @@ class MinimalVncClient(
     companion object {
         const val KEYSYM_SPACE = 0x0020
 
+        private const val DEFAULT_FRAME_WIDTH = 1280
+        private const val DEFAULT_FRAME_HEIGHT = 800
         private const val CLIENT_VERSION = "RFB 003.008\n"
         private const val SECURITY_NONE = 1
         private const val SECURITY_VNC_AUTH = 2
@@ -332,6 +368,7 @@ class MinimalVncClient(
         private const val CLIENT_KEY_EVENT = 4
         private const val CLIENT_POINTER_EVENT = 5
         private const val SERVER_FRAMEBUFFER_UPDATE = 0
+        private const val SERVER_SET_COLOR_MAP = 1
         private const val SERVER_BELL = 2
         private const val SERVER_CUT_TEXT = 3
         private const val ENCODING_RAW = 0

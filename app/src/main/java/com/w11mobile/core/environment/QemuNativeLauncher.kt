@@ -49,9 +49,12 @@ object QemuNativeLauncher {
             add("-device")
             add("qemu-xhci,id=usbctrl")
             add("-drive")
-            add("file=${isoFile.absolutePath},if=none,id=winiso,format=raw,readonly=on")
+            add(
+                "file=${isoFile.absolutePath},if=none,id=winiso,media=cdrom,format=raw," +
+                    "readonly=on,cache=unsafe",
+            )
             add("-device")
-            add("usb-storage,bus=usbctrl.0,drive=winiso,bootindex=1,removable=on")
+            add("virtio-blk-pci,drive=winiso,bootindex=1")
             if (installDisk != null && installDisk.exists()) {
                 add("-drive")
                 add("file=${installDisk.absolutePath},if=none,format=qcow2,id=windisk")

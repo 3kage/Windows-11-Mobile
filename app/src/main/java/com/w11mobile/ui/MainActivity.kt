@@ -2,24 +2,29 @@ package com.w11mobile.ui
 
 import android.content.Intent
 import android.net.Uri
-import androidx.lifecycle.lifecycleScope
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
+import androidx.lifecycle.lifecycleScope
 import com.w11mobile.R
 import com.w11mobile.core.environment.ImageSource
 import com.w11mobile.core.environment.SetupStep
 import com.w11mobile.core.environment.WindowsImageArch
 import com.w11mobile.databinding.ActivityMainBinding
+import com.w11mobile.service.QemuServiceController
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private val viewModel: MainViewModel by viewModels()
+
+    private val qemuServiceConnection = QemuServiceController.createConnection(
+        onConnected = { service -> viewModel.onQemuServiceConnected(service) },
+    )
 
     private val pickImageLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -45,6 +50,16 @@ class MainActivity : AppCompatActivity() {
         setupObservers()
         setupClickListeners()
         setupQemuKeyboardInput()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        QemuServiceController.bind(this, qemuServiceConnection)
+    }
+
+    override fun onStop() {
+        QemuServiceController.unbind(this, qemuServiceConnection)
+        super.onStop()
     }
 
     private fun setupQemuKeyboardInput() {
@@ -157,11 +172,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnLaunchWindows.setOnClickListener {
-            if (viewModel.uiState.value?.isRunning == true) return@setOnClickListener
+            if (viewModel.uiState.value?.windowsSessionActive == true) return@setOnClickListener
             lifecycleScope.launch {
                 val isoBootMode = viewModel.prepareWindowsLaunch() ?: return@launch
-                openWindowsDisplay(isoBootMode)
                 viewModel.runWindowsLaunch(isoBootMode)
+                openWindowsDisplay(isoBootMode)
             }
         }
 

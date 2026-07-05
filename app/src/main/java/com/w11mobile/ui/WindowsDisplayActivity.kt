@@ -10,6 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import com.w11mobile.core.environment.QemuProcessSession
 import com.w11mobile.core.environment.QemuRuntimeEvents
 import com.w11mobile.databinding.ActivityWindowsDisplayBinding
+import com.w11mobile.service.QemuServiceController
 import com.w11mobile.vnc.MinimalVncClient
 import com.w11mobile.vnc.VncConnectionDiagnostics
 import com.w11mobile.vnc.VncEndpoint
@@ -27,6 +28,8 @@ class WindowsDisplayActivity : AppCompatActivity() {
     private val viewModel: WindowsDisplayViewModel by viewModels()
     private var vncClient: MinimalVncClient? = null
     private var connectJob: Job? = null
+
+    private val qemuServiceConnection = QemuServiceController.createConnection()
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -67,8 +70,27 @@ class WindowsDisplayActivity : AppCompatActivity() {
                 finish()
             }
         }
+    }
 
+    override fun onStart() {
+        super.onStart()
+        QemuServiceController.bind(this, qemuServiceConnection)
+    }
+
+    override fun onStop() {
+        pauseVncConnection()
+        QemuServiceController.unbind(this, qemuServiceConnection)
+        super.onStop()
+    }
+
+    override fun onResume() {
+        super.onResume()
         startVncConnection()
+    }
+
+    override fun onPause() {
+        pauseVncConnection()
+        super.onPause()
     }
 
     private fun setupInputControls() {
@@ -113,15 +135,22 @@ class WindowsDisplayActivity : AppCompatActivity() {
         viewModel.sendAnyKeyToQemu()
     }
 
-    override fun onDestroy() {
+    private fun pauseVncConnection() {
         connectJob?.cancel()
+        connectJob = null
         vncClient?.close()
         vncClient = null
+    }
+
+    override fun onDestroy() {
+        pauseVncConnection()
         super.onDestroy()
     }
 
     private fun startVncConnection() {
-        connectJob?.cancel()
+        if (connectJob?.isActive == true) {
+            return
+        }
         connectJob = lifecycleScope.launch {
             var attempt = 0
             while (isActive && attempt < MAX_CONNECT_ATTEMPTS) {

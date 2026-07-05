@@ -14,6 +14,8 @@ import com.w11mobile.core.environment.QemuRuntimeEvents
 import com.w11mobile.core.environment.SetupPreferences
 import com.w11mobile.core.environment.SetupStep
 import com.w11mobile.core.environment.WindowsImageArch
+import com.w11mobile.service.QemuService
+import com.w11mobile.service.QemuServiceController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,11 +54,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         QemuRuntimeEvents.onStatus = { message ->
             appendLog(">>> $message\n")
         }
+        QemuRuntimeEvents.onTerminalLine = { line ->
+            appendLog(line)
+        }
+        QemuRuntimeEvents.onSessionEnded = { exitCode ->
+            viewModelScope.launch {
+                if (exitCode != 0) {
+                    appendLog("\n>>> QEMU завершився з кодом $exitCode\n")
+                } else {
+                    appendLog("\n>>> Сесію Windows завершено.\n")
+                }
+                val flags = withContext(Dispatchers.IO) { readEnvironmentFlags() }
+                updateState {
+                    copy(
+                        isRunning = false,
+                        windowsSessionActive = false,
+                        environmentReady = flags.first,
+                        canLaunchWindows = flags.second,
+                    )
+                }
+            }
+        }
         viewModelScope.launch(Dispatchers.IO) {
             val initialState = loadInitialUiState()
             uiStateStore.set(initialState)
             _uiState.postValue(initialState)
         }
+    }
+
+    fun onQemuServiceConnected(service: QemuService) {
+        if (service.isQemuAlive() || service.isLaunchInProgress()) {
+            updateState {
+                copy(
+                    windowsSessionActive = true,
+                    isRunning = service.isLaunchInProgress(),
+                )
+            }
+        }
+    }
+
+    fun onQemuServiceDisconnected() {
+        // Service process may still be running; session state comes from QemuProcessSession events.
     }
 
     fun setImageSource(source: ImageSource) {
@@ -180,39 +218,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun runWindowsLaunch(isoBootMode: Boolean) {
-        viewModelScope.launch {
-            QemuBoot0001AutoKey.reset()
-            QemuEfiShellAutoKey.reset()
-            updateState {
-                copy(
-                    isRunning = true,
-                    windowsSessionActive = true,
-                    isoBootMode = isoBootMode,
-                    errorMessage = null,
-                )
-            }
-            if (isoBootMode) {
-                appendLog(">>> Торкніться «Будь-яка клавіша» на сенсорному екрані або в головному меню.\n")
-            } else {
-                appendLog(">>> Керуйте Windows через сенсорний екран.\n")
-            }
-            try {
-                orchestrator.launchWindows()
-            } catch (error: Exception) {
-                appendLog("\n[ПОМИЛКА] ${error.message}\n")
-                updateState { copy(errorMessage = error.message) }
-            } finally {
-                val flags = withContext(Dispatchers.IO) { readEnvironmentFlags() }
-                updateState {
-                    copy(
-                        isRunning = false,
-                        windowsSessionActive = false,
-                        environmentReady = flags.first,
-                        canLaunchWindows = flags.second,
-                    )
-                }
-            }
+        QemuBoot0001AutoKey.reset()
+        QemuEfiShellAutoKey.reset()
+        updateState {
+            copy(
+                isRunning = true,
+                windowsSessionActive = true,
+                isoBootMode = isoBootMode,
+                errorMessage = null,
+            )
         }
+        if (isoBootMode) {
+            appendLog(">>> Торкніться «Будь-яка клавіша» на сенсорному екрані або в головному меню.\n")
+        } else {
+            appendLog(">>> Керуйте Windows через сенсорний екран.\n")
+        }
+        appendLog(">>> QEMU запускається у Foreground Service (стійкий фоновий режим)…\n")
+        QemuServiceController.startLaunch(getApplication(), isoBootMode)
     }
 
     fun sendAnyKeyToQemu() {
@@ -235,9 +257,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun isIsoBootModeCached(): Boolean = _uiState.value?.isoBootMode == true
 
+    fun isWindowsSessionActive(): Boolean = _uiState.value?.windowsSessionActive == true
+
     override fun onCleared() {
         QemuRuntimeEvents.onFatalError = null
         QemuRuntimeEvents.onStatus = null
+        QemuRuntimeEvents.onTerminalLine = null
+        QemuRuntimeEvents.onSessionEnded = null
         super.onCleared()
     }
 
@@ -254,6 +280,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             windowsImageArch = preferences.windowsImageArch,
             environmentReady = orchestrator.isEnvironmentReady(),
             canLaunchWindows = orchestrator.canLaunchWindows(),
+            windowsSessionActive = QemuServiceController.isQemuRunning(),
         )
     }
 

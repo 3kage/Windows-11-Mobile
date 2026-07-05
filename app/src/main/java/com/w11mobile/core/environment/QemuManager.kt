@@ -120,7 +120,16 @@ class QemuManager(
             onLine(">>> ${isoCheck.message}\n")
             require(isoCheck.ok) { isoCheck.message }
 
-            WindowsIsoWarmup.warm(paths.windowsIso) { line -> onLine("$line\n") }
+            onLine(">>> Прогрів ISO у фоні (QEMU стартує одразу)…\n")
+            Thread(
+                {
+                    WindowsIsoWarmup.warm(paths.windowsIso) { line -> onLine("$line\n") }
+                },
+                "iso-warmup",
+            ).apply {
+                isDaemon = true
+                start()
+            }
 
             val diskResult = createInstallDiskIfNeeded { line -> onLine("$line\n") }
             if (diskResult.exitCode != 0 && diskResult.command != "skip") {

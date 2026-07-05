@@ -57,6 +57,26 @@ object QemuMonitorClient {
         return false
     }
 
+    /** Opens a persistent monitor session (preferred for rapid sendkey bursts). */
+    fun openSession(
+        host: String = QemuNativeLauncher.MONITOR_HOST,
+        port: Int = QemuNativeLauncher.MONITOR_PORT,
+    ): QemuMonitorSession? {
+        repeat(MAX_CONNECT_ATTEMPTS) { attempt ->
+            if (attempt == 0 && awaitingMonitorWarmup) {
+                Thread.sleep(PRE_CONNECT_DELAY_MS)
+            } else if (attempt > 0) {
+                Thread.sleep(CONNECT_RETRY_DELAY_MS)
+            }
+            val session = QemuMonitorSession.open(host, port)
+            if (session != null) {
+                awaitingMonitorWarmup = false
+                return session
+            }
+        }
+        return null
+    }
+
     /** Sends a raw HMP line (e.g. `sendkey spc`) to the QEMU monitor socket. */
     fun sendRawMonitorCommand(
         command: String,

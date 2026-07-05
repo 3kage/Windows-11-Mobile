@@ -34,16 +34,26 @@ object QemuBoot0001AutoKey {
                 delay(MONITOR_POLL_MS)
                 waitedMs += MONITOR_POLL_MS
             }
+
             QemuRuntimeEvents.publishStatus(
                 "Boot0001 — sendkey spc кожні ${SPAM_INTERVAL_MS}ms протягом ${SPAM_DURATION_MS / 1000} с…",
             )
             val deadlineMs = System.currentTimeMillis() + SPAM_DURATION_MS
             var sent = 0
-            while (System.currentTimeMillis() < deadlineMs) {
-                if (QemuMonitorClient.sendRawMonitorCommand("sendkey spc")) {
-                    sent += 1
+            QemuMonitorClient.openSession()?.use { session ->
+                while (System.currentTimeMillis() < deadlineMs) {
+                    if (session.sendCommand("sendkey spc")) {
+                        sent += 1
+                    }
+                    delay(SPAM_INTERVAL_MS)
                 }
-                delay(SPAM_INTERVAL_MS)
+            } ?: run {
+                while (System.currentTimeMillis() < deadlineMs) {
+                    if (QemuMonitorClient.sendRawMonitorCommand("sendkey spc")) {
+                        sent += 1
+                    }
+                    delay(SPAM_INTERVAL_MS)
+                }
             }
             QemuRuntimeEvents.publishStatus(
                 "Boot0001 sendkey spc завершено ($sent×) → " +

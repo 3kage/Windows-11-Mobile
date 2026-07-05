@@ -25,6 +25,7 @@ object QemuBoot0001AutoKey {
             return
         }
         scope.launch(Dispatchers.IO) {
+            Thread.sleep(BOOT0001_SETTLE_MS)
             QemuRuntimeEvents.publishStatus(
                 "Boot0001 — очікування QEMU monitor ${QemuNativeLauncher.MONITOR_PORT}…",
             )
@@ -51,6 +52,7 @@ object QemuBoot0001AutoKey {
         }
     }
 
+    private const val BOOT0001_SETTLE_MS = 1_000L
     private const val MONITOR_WAIT_MS = 10_000L
     private const val MONITOR_POLL_MS = 200L
     private const val SPAM_DURATION_MS = 5_000L

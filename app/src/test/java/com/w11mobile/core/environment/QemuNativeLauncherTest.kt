@@ -37,25 +37,27 @@ class QemuNativeLauncherTest {
         assertFalse(args.any { it.contains("qemu-xhci") && it.contains("iothread") })
         assertTrue(
             args.contains(
-                "file=${iso.absolutePath},if=none,id=winiso,media=cdrom,format=raw," +
-                    "readonly=on,cache=unsafe,aio=threads",
+                "file=${iso.absolutePath},if=none,id=winiso,media=cdrom,format=raw,readonly=on",
             ),
         )
         assertTrue(args.contains("usb-storage,bus=usbctrl.0,drive=winiso,bootindex=1,removable=on"))
         assertFalse(args.any { it.contains("virtio-blk-pci,drive=winiso") })
         assertTrue(
             args.contains(
-                "file=${disk.absolutePath},if=none,format=qcow2,id=windisk,cache=unsafe,aio=threads",
+                "file=${disk.absolutePath},if=none,format=qcow2,id=windisk",
             ),
         )
         assertTrue(
             args.contains(
-                "virtio-blk-pci,drive=windisk,romfile=${File(romDir, "efi-virtio.rom").absolutePath},iothread=winio",
+                "virtio-blk-pci,drive=windisk,romfile=${File(romDir, "efi-virtio.rom").absolutePath}",
             ),
         )
         assertFalse(args.any { it.contains("windisk,bootindex") })
-        assertTrue(args.contains("order=c,menu=on,splash-time=60000"))
-        assertTrue(args.contains("iothread,id=winio"))
+        assertTrue(args.contains("order=c,menu=on"))
+        assertFalse(args.any { it.contains("iothread") })
+        assertFalse(args.any { it.contains("cache=unsafe") })
+        assertFalse(args.any { it.contains("aio=threads") })
+        assertFalse(args.any { it.contains("WaitForVMBootTimeout") })
         assertTrue(args.contains("ramfb"))
         assertFalse(args.contains("virtio-gpu-pci"))
         assertTrue(args.contains("usb-kbd,bus=usbctrl.0"))

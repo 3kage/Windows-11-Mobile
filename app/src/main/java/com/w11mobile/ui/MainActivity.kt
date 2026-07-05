@@ -8,16 +8,23 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
+import androidx.lifecycle.lifecycleScope
 import com.w11mobile.R
 import com.w11mobile.core.environment.ImageSource
 import com.w11mobile.core.environment.SetupStep
 import com.w11mobile.core.environment.WindowsImageArch
 import com.w11mobile.databinding.ActivityMainBinding
+import com.w11mobile.service.QemuServiceController
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private val viewModel: MainViewModel by viewModels()
+
+    private val qemuServiceConnection = QemuServiceController.createConnection(
+        onConnected = { service -> viewModel.onQemuServiceConnected(service) },
+    )
 
     private val pickImageLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -42,6 +49,31 @@ class MainActivity : AppCompatActivity() {
 
         setupObservers()
         setupClickListeners()
+        setupQemuKeyboardInput()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        QemuServiceController.bind(this, qemuServiceConnection)
+    }
+
+    override fun onStop() {
+        QemuServiceController.unbind(this, qemuServiceConnection)
+        super.onStop()
+    }
+
+    private fun setupQemuKeyboardInput() {
+        QemuKeyboardInputHelper.bindEditText(
+            editText = binding.qemuKeyboardInputMain,
+            scope = lifecycleScope,
+            onMonitorError = { message ->
+                appendMonitorError(message)
+            },
+        )
+    }
+
+    private fun appendMonitorError(message: String) {
+        viewModel.appendMonitorError(message)
     }
 
     private fun setupObservers() {
@@ -68,6 +100,11 @@ class MainActivity : AppCompatActivity() {
 
             binding.btnLaunchWindows.isEnabled = state.canLaunchWindows && !state.isRunning
             binding.btnLaunchWindows.isVisible = state.environmentReady || state.step == SetupStep.COMPLETE
+
+            binding.btnOpenTouchDisplay.isVisible = state.windowsSessionActive
+            binding.btnStopWindows.isVisible = state.windowsSessionActive
+            binding.btnSendAnyKey.isVisible = state.windowsSessionActive
+            binding.btnShowKeyboardMain.isVisible = state.windowsSessionActive
 
             binding.btnImportLocalImage.isEnabled = !state.isRunning && !state.localImageUri.isNullOrBlank()
             binding.btnImportLocalImage.isVisible = state.imageSource == ImageSource.LOCAL
@@ -136,12 +173,42 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnLaunchWindows.setOnClickListener {
-            viewModel.launchWindows11()
+            if (viewModel.uiState.value?.windowsSessionActive == true) return@setOnClickListener
+            lifecycleScope.launch {
+                val isoBootMode = viewModel.prepareWindowsLaunch() ?: return@launch
+                viewModel.runWindowsLaunch(isoBootMode)
+                openWindowsDisplay(isoBootMode)
+            }
+        }
+
+        binding.btnOpenTouchDisplay.setOnClickListener {
+            openWindowsDisplay(viewModel.isIsoBootModeCached())
+        }
+
+        binding.btnStopWindows.setOnClickListener {
+            viewModel.stopWindowsSession()
+        }
+
+        binding.btnSendAnyKey.setOnClickListener {
+            viewModel.sendAnyKeyToQemu()
+        }
+
+        binding.btnShowKeyboardMain.setOnClickListener {
+            QemuKeyboardInputHelper.showKeyboard(this, binding.qemuKeyboardInputMain)
         }
 
         binding.btnClearLog.setOnClickListener {
             viewModel.clearLog()
         }
+    }
+
+    private fun openWindowsDisplay(showBootOverlay: Boolean) {
+        startActivity(
+            Intent(this, WindowsDisplayActivity::class.java).apply {
+                putExtra(WindowsDisplayActivity.EXTRA_SHOW_BOOT_OVERLAY, showBootOverlay)
+                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            },
+        )
     }
 
     private fun sourceToToggleId(source: ImageSource): Int =

@@ -5,6 +5,17 @@ import java.io.File
 
 object QemuNativeLauncher {
     const val LINKER64 = "/system/bin/linker64"
+    /** QEMU VNC display index (:0) — not the TCP port. */
+    const val VNC_DISPLAY_INDEX = 0
+    /** TCP port for [VNC_DISPLAY] index :0 — always 5900, never the display index. */
+    const val VNC_TCP_PORT = 5900
+    /** @see VNC_TCP_PORT */
+    const val VNC_PORT = VNC_TCP_PORT
+    const val VNC_HOST = "127.0.0.1"
+    const val VNC_DISPLAY = "vnc=$VNC_HOST:$VNC_DISPLAY_INDEX"
+    const val MONITOR_HOST = "127.0.0.1"
+    const val MONITOR_PORT = 4444
+
     private const val VIRTIO_ROM = "efi-virtio.rom"
 
     fun buildEnvironment(paths: AppPaths): Map<String, String> = mapOf(
@@ -25,6 +36,8 @@ object QemuNativeLauncher {
         installDisk: File? = null,
     ): List<String> {
         val virtioRom = File(qemuShareDir, VIRTIO_ROM).absolutePath
+        val isoDrive =
+            "file=${isoFile.absolutePath},if=none,id=winiso,media=cdrom,format=raw,readonly=on"
         return buildList {
             add("-L")
             add(qemuShareDir.absolutePath)
@@ -41,19 +54,23 @@ object QemuNativeLauncher {
             add("-device")
             add("qemu-xhci,id=usbctrl")
             add("-drive")
-            add("file=${isoFile.absolutePath},if=none,id=winiso,format=raw")
+            add(isoDrive)
             add("-device")
-            add("usb-storage,bus=usbctrl.0,drive=winiso,bootindex=1")
+            add("usb-storage,bus=usbctrl.0,drive=winiso,bootindex=1,removable=on")
             if (installDisk != null && installDisk.exists()) {
                 add("-drive")
                 add("file=${installDisk.absolutePath},if=none,format=qcow2,id=windisk")
+                // Data disk for the installer — no bootindex so UEFI only boots the ISO.
                 add("-device")
-                add("virtio-blk-pci,drive=windisk,bootindex=2,romfile=$virtioRom")
+                add("virtio-blk-pci,drive=windisk,romfile=$virtioRom")
             }
-            add("-display")
-            add("none")
+            add("-boot")
+            add("order=c,menu=on")
+            addUsbInputAndVncDisplay()
+            add("-monitor")
+            add("tcp:$MONITOR_HOST:$MONITOR_PORT,server,nowait")
             add("-serial")
-            add("mon:stdio")
+            add("stdio")
             add("-no-reboot")
         }
     }
@@ -77,15 +94,27 @@ object QemuNativeLauncher {
             add("4096")
             add("-bios")
             add(uefiFirmware.absolutePath)
+            add("-device")
+            add("qemu-xhci,id=usbctrl")
             add("-drive")
             add("file=${diskFile.absolutePath},if=none,format=qcow2,id=windisk")
             add("-device")
             add("virtio-blk-pci,drive=windisk,bootindex=1,romfile=$virtioRom")
-            add("-display")
-            add("none")
+            addUsbInputAndVncDisplay()
             add("-serial")
-            add("mon:stdio")
+            add("stdio")
             add("-no-reboot")
         }
+    }
+
+    private fun MutableList<String>.addUsbInputAndVncDisplay() {
+        add("-device")
+        add("ramfb")
+        add("-device")
+        add("usb-kbd,bus=usbctrl.0")
+        add("-device")
+        add("usb-tablet,bus=usbctrl.0")
+        add("-display")
+        add(VNC_DISPLAY)
     }
 }

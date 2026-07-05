@@ -6,11 +6,18 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
+import com.w11mobile.core.environment.QemuBoot0001AutoKey
+import com.w11mobile.core.environment.QemuEfiShellAutoKey
 import com.w11mobile.core.environment.EnvironmentSetupOrchestrator
 import com.w11mobile.core.environment.ImageSource
+import com.w11mobile.core.environment.QemuProcessSession
+import com.w11mobile.core.environment.QemuRuntimeEvents
 import com.w11mobile.core.environment.SetupPreferences
 import com.w11mobile.core.environment.SetupStep
 import com.w11mobile.core.environment.WindowsImageArch
+import com.w11mobile.core.environment.WindowsImageFileValidator
+import com.w11mobile.service.QemuService
+import com.w11mobile.service.QemuServiceController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -36,11 +43,60 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     init {
+        QemuRuntimeEvents.onFatalError = { message ->
+            appendLog("\n>>> $message\n")
+            updateState {
+                copy(
+                    errorMessage = message,
+                    windowsSessionActive = false,
+                    isRunning = false,
+                )
+            }
+        }
+        QemuRuntimeEvents.onStatus = { message ->
+            appendLog(">>> $message\n")
+        }
+        QemuRuntimeEvents.onTerminalLine = { line ->
+            appendLog(line)
+        }
+        QemuRuntimeEvents.onSessionEnded = { exitCode ->
+            viewModelScope.launch {
+                when (exitCode) {
+                    QemuProcessSession.FORCED_STOP_EXIT_CODE -> Unit
+                    0 -> appendLog("\n>>> Сесію Windows завершено.\n")
+                    else -> appendLog("\n>>> QEMU завершився з кодом $exitCode\n")
+                }
+                val flags = withContext(Dispatchers.IO) { readEnvironmentFlags() }
+                updateState {
+                    copy(
+                        isRunning = false,
+                        windowsSessionActive = false,
+                        environmentReady = flags.first,
+                        canLaunchWindows = flags.second,
+                    )
+                }
+            }
+        }
         viewModelScope.launch(Dispatchers.IO) {
             val initialState = loadInitialUiState()
             uiStateStore.set(initialState)
             _uiState.postValue(initialState)
         }
+    }
+
+    fun onQemuServiceConnected(service: QemuService) {
+        if (service.isQemuAlive() || service.isLaunchInProgress()) {
+            updateState {
+                copy(
+                    windowsSessionActive = true,
+                    isRunning = service.isLaunchInProgress(),
+                )
+            }
+        }
+    }
+
+    fun onQemuServiceDisconnected() {
+        // Service process may still be running; session state comes from QemuProcessSession events.
     }
 
     fun setImageSource(source: ImageSource) {
@@ -59,6 +115,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onLocalImageSelected(uri: Uri, displayName: String?) {
+        val resolvedName = displayName?.takeIf { it.isNotBlank() } ?: uri.lastPathSegment.orEmpty()
+        WindowsImageFileValidator.validateFileName(resolvedName)?.let { message ->
+            appendLog("\n[ПОМИЛКА] $message\n")
+            updateState { copy(errorMessage = message) }
+            return
+        }
+
         val uriString = uri.toString()
         preferences.localImageUri = uriString
         preferences.localImageName = displayName
@@ -80,6 +143,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun initializeWindows11() {
         val state = _uiState.value ?: return
         if (state.isRunning) return
+
+        validateSelectedLocalImage(state)?.let { message ->
+            updateState { copy(errorMessage = message) }
+            appendLog("\n[ПОМИЛКА] $message\n")
+            return
+        }
 
         viewModelScope.launch {
             updateState {
@@ -123,6 +192,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             updateState { copy(errorMessage = "Спочатку оберіть локальний файл образу.") }
             return
         }
+        validateSelectedLocalImage(state)?.let { message ->
+            updateState { copy(errorMessage = message) }
+            appendLog("\n[ПОМИЛКА] $message\n")
+            return
+        }
 
         viewModelScope.launch {
             updateState { copy(isRunning = true, errorMessage = null, isIndeterminate = true) }
@@ -146,35 +220,85 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun launchWindows11() {
-        val state = _uiState.value ?: return
-        if (state.isRunning) return
-
-        viewModelScope.launch {
-            updateState { copy(isRunning = true, errorMessage = null) }
+    suspend fun prepareWindowsLaunch(): Boolean? = withContext(Dispatchers.IO) {
+        try {
             appendLog("\n>>> Запуск Windows 11...\n")
-            try {
-                if (!withContext(Dispatchers.IO) { orchestrator.refreshEnvironmentReadinessFromDisk() }) {
-                    error("Середовище не готове. Завершіть ініціалізацію один раз — повторне розпакування не потрібне.")
-                }
-                if (!withContext(Dispatchers.IO) { orchestrator.canLaunchWindows() }) {
-                    error("Образ Windows не знайдено. Імпортуйте ISO або QCOW2.")
-                }
-                orchestrator.launchWindows()
-            } catch (error: Exception) {
-                appendLog("\n[ПОМИЛКА] ${error.message}\n")
-                updateState { copy(errorMessage = error.message) }
-            } finally {
-                val flags = withContext(Dispatchers.IO) { readEnvironmentFlags() }
-                updateState {
-                    copy(
-                        isRunning = false,
-                        environmentReady = flags.first,
-                        canLaunchWindows = flags.second,
-                    )
+            if (!orchestrator.refreshEnvironmentReadinessFromDisk()) {
+                error("Середовище не готове. Завершіть ініціалізацію один раз — повторне розпакування не потрібне.")
+            }
+            if (!orchestrator.canLaunchWindows()) {
+                error("Образ Windows не знайдено. Імпортуйте ISO або QCOW2.")
+            }
+            orchestrator.isIsoBootMode()
+        } catch (error: Exception) {
+            appendLog("\n[ПОМИЛКА] ${error.message}\n")
+            updateState { copy(errorMessage = error.message) }
+            null
+        }
+    }
+
+    fun runWindowsLaunch(isoBootMode: Boolean) {
+        QemuBoot0001AutoKey.reset()
+        QemuEfiShellAutoKey.reset()
+        updateState {
+            copy(
+                isRunning = true,
+                windowsSessionActive = true,
+                isoBootMode = isoBootMode,
+                errorMessage = null,
+            )
+        }
+        if (isoBootMode) {
+            appendLog(">>> Торкніться «Будь-яка клавіша» на сенсорному екрані або в головному меню.\n")
+        } else {
+            appendLog(">>> Керуйте Windows через сенсорний екран.\n")
+        }
+        appendLog(">>> QEMU запускається у Foreground Service (стійкий фоновий режим)…\n")
+        QemuServiceController.startLaunch(getApplication(), isoBootMode)
+    }
+
+    fun stopWindowsSession() {
+        appendLog("\n>>> Зупинка Windows / QEMU…\n")
+        QemuServiceController.stopLaunch(getApplication())
+        updateState {
+            copy(
+                windowsSessionActive = false,
+                isRunning = false,
+            )
+        }
+    }
+
+    fun sendAnyKeyToQemu() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val sent = com.w11mobile.core.environment.QemuMonitorClient.sendMonitorCommand(
+                command = "sendkey spc",
+                waitForPortMs = 15_000L,
+            )
+            withContext(Dispatchers.Main) {
+                if (sent) {
+                    appendLog(">>> Пробіл надіслано в QEMU monitor (127.0.0.1:4444).\n")
+                } else {
+                    appendMonitorError("Не вдалося надіслати клавішу. Переконайтеся, що Windows запущено.")
                 }
             }
         }
+    }
+
+    fun appendMonitorError(message: String) {
+        appendLog(">>> $message\n")
+        updateState { copy(errorMessage = message) }
+    }
+
+    fun isIsoBootModeCached(): Boolean = _uiState.value?.isoBootMode == true
+
+    fun isWindowsSessionActive(): Boolean = _uiState.value?.windowsSessionActive == true
+
+    override fun onCleared() {
+        QemuRuntimeEvents.onFatalError = null
+        QemuRuntimeEvents.onStatus = null
+        QemuRuntimeEvents.onTerminalLine = null
+        QemuRuntimeEvents.onSessionEnded = null
+        super.onCleared()
     }
 
     fun clearLog() {
@@ -190,6 +314,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             windowsImageArch = preferences.windowsImageArch,
             environmentReady = orchestrator.isEnvironmentReady(),
             canLaunchWindows = orchestrator.canLaunchWindows(),
+            windowsSessionActive = QemuServiceController.isQemuRunning(),
         )
     }
 
@@ -217,8 +342,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun readEnvironmentFlags(): Pair<Boolean, Boolean> =
         orchestrator.isEnvironmentReady() to orchestrator.canLaunchWindows()
 
+    private fun validateSelectedLocalImage(state: SetupUiState): String? {
+        if (state.imageSource != ImageSource.LOCAL) {
+            return null
+        }
+        val fileName = state.localImageName
+            ?: state.localImageUri?.substringAfterLast('/')
+            ?: return "Спочатку оберіть локальний файл образу Windows (.iso або .qcow2)."
+        return WindowsImageFileValidator.validateFileName(fileName)
+    }
+
     private fun appendLog(text: String) {
         updateState { copy(terminalLog = terminalLog + text) }
+        QemuBoot0001AutoKey.onTerminalLine(text, viewModelScope)
+        QemuEfiShellAutoKey.onTerminalLine(text, viewModelScope)
     }
 
     private fun updateState(transform: SetupUiState.() -> SetupUiState) {

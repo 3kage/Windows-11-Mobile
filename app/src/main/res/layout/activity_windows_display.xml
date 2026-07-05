@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <com.w11mobile.ui.VncFrameView
+        android:id="@+id/vncFrameView"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:contentDescription="@string/windows_display_touch_hint"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <TextView
+        android:id="@+id/vncStatusText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp"
+        android:background="@drawable/vnc_floating_panel_bg"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="6dp"
+        android:text="@string/windows_display_connecting"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:textColor="@android:color/white"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="VNC 800x600" />
+
+    <LinearLayout
+        android:id="@+id/bootOverlay"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="8dp"
+        android:layout_marginBottom="4dp"
+        android:background="@drawable/vnc_floating_panel_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="4dp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/displayControls"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:visibility="visible">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:text="@string/windows_display_boot_banner"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="@android:color/white" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSendAnyKey"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginStart="4dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="36dp"
+            android:minWidth="48dp"
+            android:paddingHorizontal="8dp"
+            android:text="@string/windows_display_space_short"
+            app:cornerRadius="10dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnShowKeyboardOverlay"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="36dp"
+            android:minWidth="40dp"
+            android:paddingHorizontal="6dp"
+            android:text="@string/windows_display_keyboard_short"
+            android:textColor="@android:color/white"
+            app:cornerRadius="10dp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/displayControls"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp"
+        android:background="@drawable/vnc_floating_panel_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="4dp"
+        android:paddingVertical="2dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:visibility="visible">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSpaceKey"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="40dp"
+            android:minWidth="48dp"
+            android:paddingHorizontal="10dp"
+            android:text="@string/windows_display_space_short"
+            android:textColor="@android:color/white"
+            app:cornerRadius="10dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnShowKeyboard"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="40dp"
+            android:minWidth="48dp"
+            android:paddingHorizontal="10dp"
+            android:text="@string/windows_display_keyboard_short"
+            android:textColor="@android:color/white"
+            app:cornerRadius="10dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDisplayMenu"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:contentDescription="@string/windows_display_menu"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="40dp"
+            android:minWidth="40dp"
+            android:paddingHorizontal="8dp"
+            android:text="@string/windows_display_menu_short"
+            android:textColor="@android:color/white"
+            app:cornerRadius="10dp" />
+    </LinearLayout>
+
+    <EditText
+        android:id="@+id/qemuKeyboardInput"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:alpha="0"
+        android:background="@android:color/transparent"
+        android:cursorVisible="false"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:importantForAutofill="no"
+        android:imeOptions="actionDone|flagNoExtractUi|flagNoFullscreen"
+        android:inputType="text|textNoSuggestions"
+        android:maxLines="1"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:ignore="LabelFor" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

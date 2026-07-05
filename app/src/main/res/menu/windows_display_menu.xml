@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_stop_windows"
+        android:title="@string/stop_windows" />
+    <item
+        android:id="@+id/action_back_to_log"
+        android:title="@string/windows_display_back_to_log" />
+</menu>

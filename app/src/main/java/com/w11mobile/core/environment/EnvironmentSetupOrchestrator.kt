@@ -64,7 +64,7 @@ class EnvironmentSetupOrchestrator(
             }
 
             if (qemuManager.isReady()) {
-                skipQemuInstallStep()
+                runStep(SetupStep.INSTALL_QEMU) { ensureQemuDependencies() }
             } else {
                 runStep(SetupStep.INSTALL_QEMU) { installQemu() }
             }
@@ -217,12 +217,9 @@ class EnvironmentSetupOrchestrator(
         onProgressChanged(progressAfterConfigure, false)
     }
 
-    private fun skipQemuInstallStep() {
-        onLog("\n=== ${SetupStep.INSTALL_QEMU.labelUk} ===\nQEMU вже встановлено.\n")
-        val progressAfterQemu =
-            SetupStep.progressBefore(SetupStep.INSTALL_QEMU) + SetupStep.INSTALL_QEMU.weight
-        onStepChanged(SetupStep.INSTALL_QEMU)
-        onProgressChanged(progressAfterQemu.coerceAtMost(100), false)
+    private suspend fun ensureQemuDependencies() {
+        onLog("QEMU вже встановлено — перевіряємо залежності libqemu_img.so...\n")
+        qemuManager.ensureSharedLibraries { line -> onLog("$line\n") }
     }
 
     private suspend fun installProot() {
@@ -369,6 +366,7 @@ class EnvironmentSetupOrchestrator(
             if (paths.windowsIso.exists()) paths.windowsIso.delete()
             require(importedFile.renameTo(paths.windowsIso)) { "Не вдалося зберегти ISO" }
 
+            onLog("Створення віртуального диска 48 GB для Windows...\n")
             val diskResult = qemuManager.createInstallDiskIfNeeded { line -> onLog(line) }
             if (diskResult.exitCode != 0 && diskResult.command != "skip") {
                 logResult(diskResult)
@@ -391,18 +389,15 @@ class EnvironmentSetupOrchestrator(
             val isoFile = File(paths.imagesDir, "windows.iso")
             if (isoFile.exists()) isoFile.delete()
             require(importedFile.renameTo(isoFile)) { "Не вдалося перемістити ISO" }
-            val result = shellExecutor.executeWithArgs(
-                args = QemuNativeLauncher.buildInvocation(
-                    paths.qemuImgNativeLib,
-                    listOf(
-                        "convert",
-                        "-O",
-                        "qcow2",
-                        isoFile.absolutePath,
-                        paths.windowsImage.absolutePath,
-                    ),
+            val result = qemuManager.runQemuImg(
+                args = listOf(
+                    "convert",
+                    "-O",
+                    "qcow2",
+                    isoFile.absolutePath,
+                    paths.windowsImage.absolutePath,
                 ),
-                environment = QemuNativeLauncher.buildEnvironment(paths),
+                onLog = { line -> onLog(line) },
             )
             logResult(result)
             require(result.success) { "Не вдалося конвертувати ISO в QCOW2" }

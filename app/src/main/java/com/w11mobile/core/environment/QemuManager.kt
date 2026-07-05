@@ -32,18 +32,7 @@ class QemuManager(
         onLog("QEMU: ${paths.qemuNativeLib.absolutePath}\n")
         onLog("Assets version: ${EnvironmentAssets.ASSETS_VERSION}\n")
 
-        if (needsLibraryRefresh()) {
-            onLog("Завантаження залежностей QEMU (Termux Bionic libs)...\n")
-            guestBinaryInstaller.installPackageLibraries(
-                packages = listOf(
-                    "qemu-utils",
-                    "qemu-system-aarch64-headless",
-                ),
-                onLog = onLog,
-            )
-        } else {
-            onLog("Залежності QEMU вже завантажено.\n")
-        }
+        ensureSharedLibraries(onLog)
 
         onLog("Копіювання UEFI firmware (без Alpine apk)...\n")
         ensureUefiFirmware(onLog)
@@ -80,24 +69,55 @@ class QemuManager(
             return ShellExecutor.Result(0, "", "", "skip")
         }
 
+        return runQemuImg(
+            args = listOf(
+                "create",
+                "-f",
+                "qcow2",
+                paths.windowsDisk.absolutePath,
+                "48G",
+            ),
+            onLog = onLog,
+        )
+    }
+
+    suspend fun runQemuImg(args: List<String>, onLog: (String) -> Unit): ShellExecutor.Result {
+        ensureSharedLibraries(onLog)
+
         require(paths.qemuImgNativeLib.exists() && paths.qemuImgNativeLib.length() > 0L) {
             "libqemu_img.so не знайдено в ${paths.qemuImgNativeLib.absolutePath}"
         }
 
-        onLog("Створення віртуального диска 48 GB для Windows...\n")
         return shellExecutor.executeWithArgs(
             args = QemuNativeLauncher.buildInvocation(
                 paths.qemuImgNativeLib,
-                listOf(
-                    "create",
-                    "-f",
-                    "qcow2",
-                    paths.windowsDisk.absolutePath,
-                    "48G",
-                ),
+                args,
             ),
             environment = QemuNativeLauncher.buildEnvironment(paths),
         )
+    }
+
+    suspend fun ensureSharedLibraries(onLog: (String) -> Unit) {
+        if (QemuSharedLibraryRequirements.hasRequiredLibraries(paths.libDir)) {
+            onLog("Залежності libqemu_img.so вже завантажено.\n")
+            return
+        }
+
+        onLog("Завантаження залежностей libqemu_img.so (Termux Bionic libs)...\n")
+        guestBinaryInstaller.installPackageLibraries(
+            packages = listOf(
+                "qemu-utils",
+                "qemu-system-aarch64-headless",
+            ),
+            onLog = onLog,
+        )
+
+        val stillMissing = QemuSharedLibraryRequirements.missingLibraries(paths.libDir)
+        require(stillMissing.isEmpty()) {
+            "Відсутні бібліотеки для libqemu_img.so: ${stillMissing.joinToString()}. " +
+                "Повторіть ініціалізацію або перевстановіть APK."
+        }
+        onLog("Залежності libqemu_img.so готові.\n")
     }
 
     suspend fun launchWindows(
@@ -131,6 +151,7 @@ class QemuManager(
                 start()
             }
 
+            onLine("Створення віртуального диска 48 GB для Windows...\n")
             val diskResult = createInstallDiskIfNeeded { line -> onLine("$line\n") }
             if (diskResult.exitCode != 0 && diskResult.command != "skip") {
                 return diskResult
@@ -293,9 +314,6 @@ class QemuManager(
             }
         }
     }
-
-    private fun needsLibraryRefresh(): Boolean =
-        !EnvironmentReadiness.hasTermuxLibraries(paths)
 
     private fun clearLegacyMarkers() {
         listOf(

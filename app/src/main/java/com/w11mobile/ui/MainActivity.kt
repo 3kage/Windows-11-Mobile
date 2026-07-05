@@ -186,6 +186,7 @@ class MainActivity : AppCompatActivity() {
         startActivity(
             Intent(this, WindowsDisplayActivity::class.java).apply {
                 putExtra(WindowsDisplayActivity.EXTRA_SHOW_BOOT_OVERLAY, showBootOverlay)
+                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             },
         )
     }

@@ -45,6 +45,7 @@ class MinimalVncClient(
     private var redShift = 16
     private var greenShift = 8
     private var blueShift = 0
+    private var lastUpdateRequestMs = 0L
 
     fun connect(listener: FrameListener) {
         val connectHost = VncEndpoint.HOST
@@ -53,6 +54,7 @@ class MinimalVncClient(
             socket = Socket().apply {
                 connect(InetSocketAddress(connectHost, connectPort), CONNECT_TIMEOUT_MS)
                 tcpNoDelay = true
+                keepAlive = true
                 soTimeout = READ_TIMEOUT_MS
             }
         } catch (error: Exception) {
@@ -82,14 +84,18 @@ class MinimalVncClient(
         requestFullUpdate(incremental = false)
 
         while (running) {
-            when (input!!.readUnsignedByte()) {
-                SERVER_FRAMEBUFFER_UPDATE -> {
-                    bitmap = handleFramebufferUpdate(bitmap, listener)
+            try {
+                when (input!!.readUnsignedByte()) {
+                    SERVER_FRAMEBUFFER_UPDATE -> {
+                        bitmap = handleFramebufferUpdate(bitmap, listener)
+                    }
+                    SERVER_SET_COLOR_MAP -> skipSetColorMapEntries()
+                    SERVER_BELL -> Unit
+                    SERVER_CUT_TEXT -> skipCutText()
+                    else -> throw IllegalStateException("Unsupported VNC server message")
                 }
-                SERVER_SET_COLOR_MAP -> skipSetColorMapEntries()
-                SERVER_BELL -> Unit
-                SERVER_CUT_TEXT -> skipCutText()
-                else -> throw IllegalStateException("Unsupported VNC server message")
+            } catch (error: java.net.SocketTimeoutException) {
+                maybeRequestUpdate(incremental = true)
             }
         }
     }
@@ -138,7 +144,6 @@ class MinimalVncClient(
 
     fun close() {
         running = false
-        ioExecutor.shutdownNow()
         try {
             socket?.close()
         } catch (_: Exception) {
@@ -146,6 +151,7 @@ class MinimalVncClient(
         socket = null
         input = null
         output = null
+        ioExecutor.shutdownNow()
     }
 
     private fun performHandshake() {
@@ -294,8 +300,17 @@ class MinimalVncClient(
             copyRawRect(workingBitmap, x, y, width, height, buffer)
         }
         listener.onFrame(workingBitmap)
-        requestFullUpdate(incremental = true)
+        maybeRequestUpdate(incremental = true)
         return workingBitmap
+    }
+
+    private fun maybeRequestUpdate(incremental: Boolean) {
+        val now = System.currentTimeMillis()
+        if (now - lastUpdateRequestMs < MIN_UPDATE_INTERVAL_MS) {
+            return
+        }
+        lastUpdateRequestMs = now
+        requestFullUpdate(incremental)
     }
 
     private fun copyRawRect(
@@ -394,7 +409,9 @@ class MinimalVncClient(
         private const val SERVER_CUT_TEXT = 3
         private const val ENCODING_RAW = 0
         private const val CONNECT_TIMEOUT_MS = 5_000
-        private const val READ_TIMEOUT_MS = 30_000
+        /** 0 = block until data arrives; UEFI ISO boot can pause VNC updates for minutes. */
+        private const val READ_TIMEOUT_MS = 0
+        private const val MIN_UPDATE_INTERVAL_MS = 500L
 
         private fun encryptVncPassword(password: String, challenge: ByteArray): ByteArray {
             val keyBytes = ByteArray(8)

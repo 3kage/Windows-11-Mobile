@@ -26,7 +26,6 @@ class WindowsDisplayViewModel : ViewModel() {
     fun configure(showBootOverlay: Boolean) {
         _bootOverlayVisible.value = showBootOverlay
         _monitorError.value = null
-        _vncConnected.value = false
         _qemuFatalError.value = null
     }
 

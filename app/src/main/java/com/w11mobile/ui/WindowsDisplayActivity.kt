@@ -121,6 +121,7 @@ class WindowsDisplayActivity : AppCompatActivity() {
     }
 
     private fun startVncConnection() {
+        connectJob?.cancel()
         connectJob = lifecycleScope.launch {
             var attempt = 0
             while (isActive && attempt < MAX_CONNECT_ATTEMPTS) {
@@ -149,6 +150,7 @@ class WindowsDisplayActivity : AppCompatActivity() {
                     continue
                 }
 
+                vncClient?.close()
                 val client = MinimalVncClient(
                     host = VncEndpoint.HOST,
                     port = VncEndpoint.TCP_PORT,
@@ -171,7 +173,8 @@ class WindowsDisplayActivity : AppCompatActivity() {
                                         viewModel.onVncConnected()
                                         if (firstFrame) {
                                             QemuRuntimeEvents.publishStatus(
-                                                "VNC підключено ${bitmap.width}x${bitmap.height} — зображення Windows на сенсорному екрані",
+                                                "VNC підключено ${bitmap.width}x${bitmap.height} — " +
+                                                    "зображення Windows на сенсорному екрані",
                                             )
                                         }
                                         if (viewModel.bootOverlayVisible.value != true) {
@@ -198,10 +201,14 @@ class WindowsDisplayActivity : AppCompatActivity() {
                         port = probe.port,
                         error = error,
                     )
-                    if (attempt >= 3 && attempt % 5 == 0) {
+                    if (viewModel.vncConnected.value != true && attempt >= 3 && attempt % 5 == 0) {
                         QemuRuntimeEvents.publishStatus(
                             "VNC RFB помилка на ${VncEndpoint.HOST}:${VncEndpoint.TCP_PORT} (спроба $attempt): " +
                                 "${error.javaClass.simpleName}: ${error.message}",
+                        )
+                    } else if (viewModel.vncConnected.value == true && attempt % 10 == 0) {
+                        QemuRuntimeEvents.publishStatus(
+                            "VNC перепідключення (спроба $attempt) після розриву з'єднання…",
                         )
                     }
                     client.close()
@@ -214,7 +221,13 @@ class WindowsDisplayActivity : AppCompatActivity() {
                         handleQemuProcessDeath(postConnectExit)
                         return@launch
                     }
-                    delay(RETRY_DELAY_MS)
+                    delay(
+                        if (viewModel.vncConnected.value == true) {
+                            RECONNECT_DELAY_MS
+                        } else {
+                            RETRY_DELAY_MS
+                        },
+                    )
                 }
             }
             binding.vncStatusText.text = getString(com.w11mobile.R.string.windows_display_connect_failed)
@@ -236,5 +249,6 @@ class WindowsDisplayActivity : AppCompatActivity() {
 
         private const val MAX_CONNECT_ATTEMPTS = 60
         private const val RETRY_DELAY_MS = 1_500L
+        private const val RECONNECT_DELAY_MS = 3_000L
     }
 }

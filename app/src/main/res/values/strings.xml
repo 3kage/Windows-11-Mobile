@@ -30,5 +30,7 @@
     <string name="windows_display_monitor_error">QEMU monitor: %1$s</string>
     <string name="windows_display_touch_hint">Торкайтеся екрана як миші.</string>
     <string name="windows_display_any_key">Будь-яка клавіша</string>
+    <string name="windows_display_space_key">Пробіл (Any Key)</string>
+    <string name="windows_display_show_keyboard">Викликати клавіатуру</string>
     <string name="windows_display_back_to_log">Повернутися до логу</string>
 </resources>

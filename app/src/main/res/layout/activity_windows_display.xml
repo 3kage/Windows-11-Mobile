@@ -11,7 +11,7 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:contentDescription="@string/windows_display_touch_hint"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/displayControls"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -39,7 +39,7 @@
         android:clickable="true"
         android:focusable="true"
         android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/displayControls"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
@@ -76,8 +76,21 @@
                 android:layout_marginTop="24dp"
                 android:minHeight="56dp"
                 android:paddingHorizontal="24dp"
-                android:text="@string/windows_display_any_key"
+                android:text="@string/windows_display_space_key"
                 app:cornerRadius="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnShowKeyboardOverlay"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:minHeight="56dp"
+                android:paddingHorizontal="24dp"
+                android:text="@string/windows_display_show_keyboard"
+                android:textColor="@android:color/white"
+                app:cornerRadius="12dp"
+                app:strokeColor="@android:color/white" />
         </LinearLayout>
     </FrameLayout>
 
@@ -88,7 +101,6 @@
         android:background="#CC111111"
         android:orientation="vertical"
         android:padding="12dp"
-        android:visibility="gone"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -101,12 +113,53 @@
             android:textAppearance="?attr/textAppearanceBodySmall"
             android:textColor="@android:color/white" />
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSpaceKey"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:minHeight="48dp"
+                android:text="@string/windows_display_space_key"
+                app:cornerRadius="12dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnShowKeyboard"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:minHeight="48dp"
+                android:text="@string/windows_display_show_keyboard"
+                android:textColor="@android:color/white"
+                app:cornerRadius="12dp"
+                app:strokeColor="@android:color/white" />
+        </LinearLayout>
+
+        <EditText
+            android:id="@+id/qemuKeyboardInput"
+            android:layout_width="1dp"
+            android:layout_height="1dp"
+            android:importantForAutofill="no"
+            android:imeOptions="flagNoExtractUi"
+            android:inputType="textNoSuggestions|textVisiblePassword"
+            android:visibility="invisible"
+            tools:ignore="LabelFor" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnCloseDisplay"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="4dp"
             android:text="@string/windows_display_back_to_log"
             android:textColor="@android:color/white" />
     </LinearLayout>

@@ -44,6 +44,21 @@ class MainActivity : AppCompatActivity() {
 
         setupObservers()
         setupClickListeners()
+        setupQemuKeyboardInput()
+    }
+
+    private fun setupQemuKeyboardInput() {
+        QemuKeyboardInputHelper.bindEditText(
+            editText = binding.qemuKeyboardInputMain,
+            scope = lifecycleScope,
+            onMonitorError = { message ->
+                appendMonitorError(message)
+            },
+        )
+    }
+
+    private fun appendMonitorError(message: String) {
+        viewModel.appendMonitorError(message)
     }
 
     private fun setupObservers() {
@@ -72,7 +87,8 @@ class MainActivity : AppCompatActivity() {
             binding.btnLaunchWindows.isVisible = state.environmentReady || state.step == SetupStep.COMPLETE
 
             binding.btnOpenTouchDisplay.isVisible = state.windowsSessionActive
-            binding.btnSendAnyKey.isVisible = state.windowsSessionActive && state.isoBootMode
+            binding.btnSendAnyKey.isVisible = state.windowsSessionActive
+            binding.btnShowKeyboardMain.isVisible = state.windowsSessionActive
 
             binding.btnImportLocalImage.isEnabled = !state.isRunning && !state.localImageUri.isNullOrBlank()
             binding.btnImportLocalImage.isVisible = state.imageSource == ImageSource.LOCAL
@@ -155,6 +171,10 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnSendAnyKey.setOnClickListener {
             viewModel.sendAnyKeyToQemu()
+        }
+
+        binding.btnShowKeyboardMain.setOnClickListener {
+            QemuKeyboardInputHelper.showKeyboard(this, binding.qemuKeyboardInputMain)
         }
 
         binding.btnClearLog.setOnClickListener {

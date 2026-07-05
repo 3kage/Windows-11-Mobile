@@ -217,16 +217,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendAnyKeyToQemu() {
         viewModelScope.launch(Dispatchers.IO) {
-            val sent = com.w11mobile.core.environment.QemuMonitorClient.sendKeyWithRetries()
+            val sent = com.w11mobile.core.environment.QemuMonitorClient.sendRawMonitorCommand("sendkey spc")
             withContext(Dispatchers.Main) {
                 if (sent) {
-                    appendLog(">>> Клавішу надіслано в QEMU monitor (127.0.0.1:4444).\n")
+                    appendLog(">>> Пробіл надіслано в QEMU monitor (127.0.0.1:4444).\n")
                 } else {
-                    appendLog(">>> Не вдалося надіслати клавішу. Переконайтеся, що Windows запущено.\n")
-                    updateState { copy(errorMessage = "QEMU monitor недоступний") }
+                    appendMonitorError("Не вдалося надіслати клавішу. Переконайтеся, що Windows запущено.")
                 }
             }
         }
+    }
+
+    fun appendMonitorError(message: String) {
+        appendLog(">>> $message\n")
+        updateState { copy(errorMessage = message) }
     }
 
     fun isIsoBootModeCached(): Boolean = _uiState.value?.isoBootMode == true

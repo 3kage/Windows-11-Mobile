@@ -39,12 +39,16 @@ class WindowsDisplayViewModel : ViewModel() {
     }
 
     fun sendAnyKeyToQemu() {
+        sendMonitorKey("spc", dismissBootOverlayOnSuccess = true)
+    }
+
+    fun sendMonitorKey(key: String, dismissBootOverlayOnSuccess: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
-            val sent = QemuMonitorClient.sendKeyWithRetries()
+            val sent = QemuMonitorClient.sendRawMonitorCommand("sendkey $key")
             withContext(Dispatchers.Main) {
                 if (sent) {
                     _monitorError.value = null
-                    if (_vncConnected.value == true) {
+                    if (dismissBootOverlayOnSuccess && _vncConnected.value == true) {
                         _bootOverlayVisible.value = false
                     }
                 } else {

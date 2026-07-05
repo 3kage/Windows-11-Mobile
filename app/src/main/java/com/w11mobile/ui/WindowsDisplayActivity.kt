@@ -46,21 +46,10 @@ class WindowsDisplayActivity : AppCompatActivity() {
             vncClient?.sendPointer(frameX, frameY, pressed)
         }
 
-        binding.bootOverlay.setOnClickListener {
-            viewModel.sendAnyKeyToQemu()
-        }
-
-        binding.btnSendAnyKey.setOnClickListener {
-            viewModel.sendAnyKeyToQemu()
-        }
-
-        binding.btnCloseDisplay.setOnClickListener {
-            finish()
-        }
+        setupInputControls()
 
         viewModel.bootOverlayVisible.observe(this) { visible ->
             binding.bootOverlay.isVisible = visible
-            binding.displayControls.isVisible = !visible
         }
 
         viewModel.monitorError.observe(this) { error ->
@@ -80,6 +69,48 @@ class WindowsDisplayActivity : AppCompatActivity() {
         }
 
         startVncConnection()
+    }
+
+    private fun setupInputControls() {
+        binding.bootOverlay.setOnClickListener {
+            viewModel.sendAnyKeyToQemu()
+        }
+
+        binding.btnSendAnyKey.setOnClickListener {
+            sendSpaceKey()
+        }
+
+        binding.btnSpaceKey.setOnClickListener {
+            sendSpaceKey()
+        }
+
+        binding.btnShowKeyboard.setOnClickListener {
+            QemuKeyboardInputHelper.showKeyboard(this, binding.qemuKeyboardInput)
+        }
+
+        binding.btnShowKeyboardOverlay.setOnClickListener {
+            QemuKeyboardInputHelper.showKeyboard(this, binding.qemuKeyboardInput)
+        }
+
+        binding.btnCloseDisplay.setOnClickListener {
+            QemuKeyboardInputHelper.hideKeyboard(this, binding.qemuKeyboardInput)
+            finish()
+        }
+
+        QemuKeyboardInputHelper.bindEditText(
+            editText = binding.qemuKeyboardInput,
+            scope = lifecycleScope,
+            onMonitorError = { message ->
+                binding.vncStatusText.text = getString(
+                    com.w11mobile.R.string.windows_display_monitor_error,
+                    message,
+                )
+            },
+        )
+    }
+
+    private fun sendSpaceKey() {
+        viewModel.sendAnyKeyToQemu()
     }
 
     override fun onDestroy() {

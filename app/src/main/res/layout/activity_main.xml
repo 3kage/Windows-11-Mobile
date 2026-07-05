@@ -52,13 +52,44 @@
         android:layout_width="0dp"
         android:layout_height="56dp"
         android:layout_marginTop="8dp"
-        android:text="@string/windows_display_any_key"
+        android:layout_marginEnd="6dp"
+        android:text="@string/windows_display_space_key"
+        android:visibility="gone"
+        app:cornerRadius="12dp"
+        app:layout_constraintEnd_toStartOf="@id/btnShowKeyboardMain"
+        app:layout_constraintHorizontal_chainStyle="packed"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnOpenTouchDisplay"
+        app:layout_constraintWidth_percent="0.48"
+        tools:visibility="visible" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnShowKeyboardMain"
+        style="@style/Widget.Material3.Button.OutlinedButton"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:layout_marginStart="6dp"
+        android:layout_marginTop="8dp"
+        android:text="@string/windows_display_show_keyboard"
         android:visibility="gone"
         app:cornerRadius="12dp"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintStart_toEndOf="@id/btnSendAnyKey"
         app:layout_constraintTop_toBottomOf="@id/btnOpenTouchDisplay"
+        app:layout_constraintWidth_percent="0.48"
         tools:visibility="visible" />
+
+    <EditText
+        android:id="@+id/qemuKeyboardInputMain"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:importantForAutofill="no"
+        android:imeOptions="flagNoExtractUi"
+        android:inputType="textNoSuggestions|textVisiblePassword"
+        android:visibility="invisible"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnSendAnyKey"
+        tools:ignore="LabelFor" />
 
     <com.google.android.material.button.MaterialButtonToggleGroup
         android:id="@+id/imageSourceToggle"
@@ -68,7 +99,7 @@
         app:checkedButton="@+id/btnSourceUrl"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btnSendAnyKey"
+        app:layout_constraintTop_toBottomOf="@id/btnShowKeyboardMain"
         app:selectionRequired="true"
         app:singleSelection="true">
 

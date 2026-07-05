@@ -29,6 +29,11 @@
     <string name="windows_display_boot_overlay_hint">Торкніться «Будь-яка клавіша» для завантаження ISO</string>
     <string name="windows_display_monitor_error">QEMU monitor: %1$s</string>
     <string name="windows_display_touch_hint">Торкайтеся екрана як миші.</string>
+    <string name="windows_display_boot_banner">Завантаження ISO — натисніть ␣ для «Press any key»</string>
+    <string name="windows_display_space_short">␣</string>
+    <string name="windows_display_keyboard_short">⌨</string>
+    <string name="windows_display_menu">Меню екрана</string>
+    <string name="windows_display_menu_short">⋮</string>
     <string name="windows_display_any_key">Будь-яка клавіша</string>
     <string name="windows_display_space_key">Пробіл (Any Key)</string>
     <string name="windows_display_show_keyboard">Викликати клавіатуру</string>

@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import com.w11mobile.databinding.ActivityWindowsDisplayBinding
@@ -28,6 +29,7 @@ class WindowsDisplayActivity : AppCompatActivity() {
     private val viewModel: WindowsDisplayViewModel by viewModels()
     private var vncClient: MinimalVncClient? = null
     private var connectJob: Job? = null
+    private var statusHideJob: Job? = null
 
     private val qemuServiceConnection = QemuServiceController.createConnection()
 
@@ -96,10 +98,6 @@ class WindowsDisplayActivity : AppCompatActivity() {
     }
 
     private fun setupInputControls() {
-        binding.bootOverlay.setOnClickListener {
-            viewModel.sendAnyKeyToQemu()
-        }
-
         binding.btnSendAnyKey.setOnClickListener {
             sendSpaceKey()
         }
@@ -116,14 +114,25 @@ class WindowsDisplayActivity : AppCompatActivity() {
             QemuKeyboardInputHelper.showKeyboard(this, binding.qemuKeyboardInput)
         }
 
-        binding.btnCloseDisplay.setOnClickListener {
-            QemuKeyboardInputHelper.hideKeyboard(this, binding.qemuKeyboardInput)
-            finish()
-        }
-
-        binding.btnStopWindowsDisplay.setOnClickListener {
-            QemuServiceController.stopLaunch(this)
-            finish()
+        binding.btnDisplayMenu.setOnClickListener { anchor ->
+            PopupMenu(this, anchor).apply {
+                menuInflater.inflate(com.w11mobile.R.menu.windows_display_menu, menu)
+                setOnMenuItemClickListener { item ->
+                    when (item.itemId) {
+                        com.w11mobile.R.id.action_stop_windows -> {
+                            QemuServiceController.stopLaunch(this@WindowsDisplayActivity)
+                            finish()
+                            true
+                        }
+                        com.w11mobile.R.id.action_back_to_log -> {
+                            QemuKeyboardInputHelper.hideKeyboard(this@WindowsDisplayActivity, binding.qemuKeyboardInput)
+                            finish()
+                            true
+                        }
+                        else -> false
+                    }
+                }
+            }.show()
         }
 
         QemuKeyboardInputHelper.bindEditText(
@@ -214,8 +223,10 @@ class WindowsDisplayActivity : AppCompatActivity() {
                                             )
                                         }
                                         if (viewModel.bootOverlayVisible.value != true) {
-                                            binding.vncStatusText.text =
-                                                getString(com.w11mobile.R.string.windows_display_connected)
+                                            updateStatusChip(
+                                                getString(com.w11mobile.R.string.windows_display_connected),
+                                                autoHide = true,
+                                            )
                                         }
                                     }
                                 }
@@ -270,6 +281,21 @@ class WindowsDisplayActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateStatusChip(text: CharSequence, autoHide: Boolean = false) {
+        statusHideJob?.cancel()
+        binding.vncStatusText.text = text
+        binding.vncStatusText.isVisible = text.isNotBlank()
+        binding.vncStatusText.alpha = 1f
+        if (autoHide) {
+            statusHideJob = lifecycleScope.launch {
+                delay(STATUS_AUTO_HIDE_MS)
+                binding.vncStatusText.animate().alpha(0f).setDuration(300).withEndAction {
+                    binding.vncStatusText.isVisible = false
+                }.start()
+            }
+        }
+    }
+
     private fun handleQemuProcessDeath(exitCode: Int) {
         connectJob?.cancel()
         val message = getString(com.w11mobile.R.string.windows_display_qemu_died, exitCode)
@@ -286,5 +312,6 @@ class WindowsDisplayActivity : AppCompatActivity() {
         private const val MAX_CONNECT_ATTEMPTS = 60
         private const val RETRY_DELAY_MS = 1_500L
         private const val RECONNECT_DELAY_MS = 3_000L
+        private const val STATUS_AUTO_HIDE_MS = 3_000L
     }
 }

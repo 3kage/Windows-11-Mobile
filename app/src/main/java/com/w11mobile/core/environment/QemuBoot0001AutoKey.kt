@@ -45,6 +45,27 @@ object QemuBoot0001AutoKey {
                 "Boot0001 sendkey spc завершено ($sent×) → " +
                     "${QemuNativeLauncher.MONITOR_HOST}:${QemuNativeLauncher.MONITOR_PORT}",
             )
+            runFollowUpSpaceKeys(scope)
+        }
+    }
+
+    private fun runFollowUpSpaceKeys(scope: CoroutineScope) {
+        scope.launch(Dispatchers.IO) {
+            QemuRuntimeEvents.publishStatus(
+                "Boot0001 — фоновий sendkey spc кожні ${FOLLOW_UP_INTERVAL_MS / 1000} с " +
+                    "(до ${FOLLOW_UP_DURATION_MS / 60_000} хв, поки завантажується UDF)…",
+            )
+            val deadlineMs = System.currentTimeMillis() + FOLLOW_UP_DURATION_MS
+            var sent = 0
+            while (System.currentTimeMillis() < deadlineMs && QemuProcessSession.isAlive()) {
+                if (QemuMonitorClient.sendMonitorCommand("sendkey spc")) {
+                    sent += 1
+                }
+                delay(FOLLOW_UP_INTERVAL_MS)
+            }
+            QemuRuntimeEvents.publishStatus(
+                "Boot0001 фоновий sendkey spc завершено ($sent×)",
+            )
         }
     }
 
@@ -53,6 +74,8 @@ object QemuBoot0001AutoKey {
     private const val MONITOR_POLL_MS = 200L
     private const val SPAM_DURATION_MS = 90_000L
     private const val SPAM_INTERVAL_MS = 250L
+    private const val FOLLOW_UP_DURATION_MS = 600_000L
+    private const val FOLLOW_UP_INTERVAL_MS = 3_000L
 
     internal fun isStartingBoot0001Line(line: String): Boolean =
         line.contains("starting Boot0001", ignoreCase = true)

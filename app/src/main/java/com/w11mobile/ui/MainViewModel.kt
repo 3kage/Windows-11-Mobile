@@ -239,7 +239,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendAnyKeyToQemu() {
         viewModelScope.launch(Dispatchers.IO) {
-            val sent = com.w11mobile.core.environment.QemuMonitorClient.sendRawMonitorCommand("sendkey spc")
+            val sent = com.w11mobile.core.environment.QemuMonitorClient.sendMonitorCommand(
+                command = "sendkey spc",
+                waitForPortMs = 15_000L,
+            )
             withContext(Dispatchers.Main) {
                 if (sent) {
                     appendLog(">>> Пробіл надіслано в QEMU monitor (127.0.0.1:4444).\n")

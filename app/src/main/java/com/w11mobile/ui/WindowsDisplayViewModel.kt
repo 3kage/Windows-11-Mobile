@@ -43,7 +43,10 @@ class WindowsDisplayViewModel : ViewModel() {
 
     fun sendMonitorKey(key: String, dismissBootOverlayOnSuccess: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
-            val sent = QemuMonitorClient.sendRawMonitorCommand("sendkey $key")
+            val sent = QemuMonitorClient.sendMonitorCommand(
+                command = "sendkey $key",
+                waitForPortMs = MANUAL_KEY_WAIT_MS,
+            )
             withContext(Dispatchers.Main) {
                 if (sent) {
                     _monitorError.value = null
@@ -55,5 +58,9 @@ class WindowsDisplayViewModel : ViewModel() {
                 }
             }
         }
+    }
+
+    private companion object {
+        const val MANUAL_KEY_WAIT_MS = 15_000L
     }
 }

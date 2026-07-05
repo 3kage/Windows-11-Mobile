@@ -37,6 +37,7 @@ object QemuProcessSession {
             activeProcess = null
             lastExitCode = exitCode
         }
+        QemuMonitorClient.closeSharedSession()
     }
 
     fun reset() {

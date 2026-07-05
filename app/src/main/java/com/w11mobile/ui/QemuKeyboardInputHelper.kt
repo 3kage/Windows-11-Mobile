@@ -83,7 +83,10 @@ object QemuKeyboardInputHelper {
     ) {
         if (key.isNullOrBlank()) return
         scope.launch(Dispatchers.IO) {
-            val sent = QemuMonitorClient.sendRawMonitorCommand("sendkey $key")
+            val sent = QemuMonitorClient.sendMonitorCommand(
+                command = "sendkey $key",
+                waitForPortMs = 5_000L,
+            )
             if (!sent) {
                 onMonitorError?.invoke("Не вдалося підключитися до QEMU monitor (127.0.0.1:4444)")
             }

@@ -15,6 +15,7 @@ import com.w11mobile.core.environment.QemuRuntimeEvents
 import com.w11mobile.core.environment.SetupPreferences
 import com.w11mobile.core.environment.SetupStep
 import com.w11mobile.core.environment.WindowsImageArch
+import com.w11mobile.core.environment.WindowsImageFileValidator
 import com.w11mobile.service.QemuService
 import com.w11mobile.service.QemuServiceController
 import kotlinx.coroutines.Dispatchers
@@ -114,6 +115,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onLocalImageSelected(uri: Uri, displayName: String?) {
+        val resolvedName = displayName?.takeIf { it.isNotBlank() } ?: uri.lastPathSegment.orEmpty()
+        WindowsImageFileValidator.validateFileName(resolvedName)?.let { message ->
+            appendLog("\n[ПОМИЛКА] $message\n")
+            updateState { copy(errorMessage = message) }
+            return
+        }
+
         val uriString = uri.toString()
         preferences.localImageUri = uriString
         preferences.localImageName = displayName
@@ -135,6 +143,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun initializeWindows11() {
         val state = _uiState.value ?: return
         if (state.isRunning) return
+
+        validateSelectedLocalImage(state)?.let { message ->
+            updateState { copy(errorMessage = message) }
+            appendLog("\n[ПОМИЛКА] $message\n")
+            return
+        }
 
         viewModelScope.launch {
             updateState {
@@ -176,6 +190,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (state.isRunning) return
         val uri = state.localImageUri ?: run {
             updateState { copy(errorMessage = "Спочатку оберіть локальний файл образу.") }
+            return
+        }
+        validateSelectedLocalImage(state)?.let { message ->
+            updateState { copy(errorMessage = message) }
+            appendLog("\n[ПОМИЛКА] $message\n")
             return
         }
 
@@ -322,6 +341,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun readEnvironmentFlags(): Pair<Boolean, Boolean> =
         orchestrator.isEnvironmentReady() to orchestrator.canLaunchWindows()
+
+    private fun validateSelectedLocalImage(state: SetupUiState): String? {
+        if (state.imageSource != ImageSource.LOCAL) {
+            return null
+        }
+        val fileName = state.localImageName
+            ?: state.localImageUri?.substringAfterLast('/')
+            ?: return "Спочатку оберіть локальний файл образу Windows (.iso або .qcow2)."
+        return WindowsImageFileValidator.validateFileName(fileName)
+    }
 
     private fun appendLog(text: String) {
         updateState { copy(terminalLog = terminalLog + text) }

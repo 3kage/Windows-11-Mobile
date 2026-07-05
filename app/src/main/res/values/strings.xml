@@ -16,7 +16,7 @@
     <string name="image_source_local">Локальний файл</string>
     <string name="pick_local_image">Обрати файл на пристрої</string>
     <string name="import_local_image">Імпортувати обраний образ</string>
-    <string name="local_image_not_selected">Файл не обрано</string>
+    <string name="local_image_not_selected">Файл не обрано (.iso або .qcow2)</string>
     <string name="status_idle">Очікування</string>
     <string name="progress_percent">%1$d%%</string>
     <string name="windows_display_connecting">Підключення до Windows…</string>

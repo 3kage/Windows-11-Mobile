@@ -21,11 +21,8 @@ class LocalImageImporter(
         val resolvedName = displayName?.takeIf { it.isNotBlank() } ?: queryDisplayName(uri)
             ?: error("Не вдалося визначити ім'я файлу")
 
-        require(
-            resolvedName.endsWith(".qcow2", ignoreCase = true) ||
-                resolvedName.endsWith(".iso", ignoreCase = true),
-        ) {
-            "Підтримуються лише файли .qcow2 або .iso (отримано: $resolvedName)"
+        WindowsImageFileValidator.validateFileName(resolvedName)?.let { message ->
+            error(message)
         }
 
         val totalBytes = querySize(uri).coerceAtLeast(0L)

@@ -65,6 +65,26 @@ class EnvironmentReadinessTest {
         )
     }
 
+    @Test
+    fun isQemuRuntimeReady_requiresVirtioRomAndEnUsKeymap() {
+        val root = createTempDir("qemu")
+        val paths = testPaths(root)
+        val nativeLibDir = File(root, "native").apply { mkdirs() }
+
+        File(nativeLibDir, "libqemu.so").writeText("stub")
+        paths.uefiFirmware.parentFile?.mkdirs()
+        paths.uefiFirmware.writeText("uefi")
+        paths.qemuVirtioRom.parentFile?.mkdirs()
+        paths.qemuVirtioRom.writeText("rom")
+
+        assertFalse(EnvironmentReadiness.isQemuRuntimeReady(paths))
+
+        paths.qemuEnUsKeymap.parentFile?.mkdirs()
+        paths.qemuEnUsKeymap.writeText("keymap")
+
+        assertTrue(EnvironmentReadiness.isQemuRuntimeReady(paths))
+    }
+
     private fun testPaths(root: File): AppPaths =
         AppPaths(
             filesDir = root,

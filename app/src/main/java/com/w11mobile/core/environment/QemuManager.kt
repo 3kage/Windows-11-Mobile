@@ -15,6 +15,7 @@ class QemuManager(
     companion object {
         const val QEMU_UEFI_ASSET = "firmware/QEMU_EFI.fd"
         const val QEMU_VIRTIO_ROM_ASSET = "qemu/efi-virtio.rom"
+        const val QEMU_KEYMAPS_ASSET_DIR = "qemu/keymaps"
     }
 
     fun ensureRuntimeAssets(onLog: ((String) -> Unit)? = null) {
@@ -67,6 +68,7 @@ class QemuManager(
             append("\nUEFI: ${paths.uefiFirmware.absolutePath} (${paths.uefiFirmware.length()} bytes)\n")
             append("QEMU ROM dir (-L): ${paths.qemuShareDir.absolutePath}\n")
             append("efi-virtio.rom: ${paths.qemuVirtioRom.length()} bytes\n")
+            append("keymap en-us: ${paths.qemuEnUsKeymap.length()} bytes\n")
             append("ISO dir: ${paths.imagesDir.absolutePath}\n")
         })
         return result
@@ -114,6 +116,21 @@ class QemuManager(
         ensureQemuRomFiles(onLine)
 
         if (config.bootMode == WindowsBootMode.ISO) {
+            val isoCheck = WindowsIsoValidator.validate(paths.windowsIso)
+            onLine(">>> ${isoCheck.message}\n")
+            require(isoCheck.ok) { isoCheck.message }
+
+            onLine(">>> Прогрів ISO у фоні (QEMU стартує одразу)…\n")
+            Thread(
+                {
+                    WindowsIsoWarmup.warm(paths.windowsIso) { line -> onLine("$line\n") }
+                },
+                "iso-warmup",
+            ).apply {
+                isDaemon = true
+                start()
+            }
+
             val diskResult = createInstallDiskIfNeeded { line -> onLine("$line\n") }
             if (diskResult.exitCode != 0 && diskResult.command != "skip") {
                 return diskResult
@@ -130,11 +147,26 @@ class QemuManager(
         onLine(">>> Запуск Windows 11 ARM64 через libqemu.so (прямий ProcessBuilder)\n")
         onLine("$ ${QemuNativeLauncher.buildInvocation(paths.qemuNativeLib, args).joinToString(" ")}\n")
 
-        return shellExecutor.executeStreamingWithArgs(
-            args = QemuNativeLauncher.buildInvocation(paths.qemuNativeLib, args),
-            environment = QemuNativeLauncher.buildEnvironment(paths),
-            onLine = onLine,
-        )
+        QemuProcessSession.markLaunchStarting()
+
+        val isoBootKeyInjector = if (config.bootMode == WindowsBootMode.ISO) {
+            QemuIsoBootKeyInjector()
+        } else {
+            null
+        }
+
+        return try {
+            shellExecutor.executeStreamingWithArgs(
+                args = QemuNativeLauncher.buildInvocation(paths.qemuNativeLib, args),
+                environment = QemuNativeLauncher.buildEnvironment(paths),
+                onLine = { line ->
+                    isoBootKeyInjector?.onOutputLine(line)
+                    onLine(line)
+                },
+            )
+        } finally {
+            isoBootKeyInjector?.stop()
+        }
     }
 
     private fun buildArm64Arguments(config: WindowsImageConfig): List<String> = when (config.bootMode) {
@@ -163,7 +195,15 @@ class QemuManager(
 
     private fun ensureQemuRomFiles(onLog: ((String) -> Unit)? = null) {
         paths.qemuShareDir.mkdirs()
+        ensureVirtioRom(onLog)
+        ensureQemuKeymaps(onLog)
 
+        onLog?.invoke("QEMU ROM (-L): ${paths.qemuShareDir.absolutePath}\n")
+        onLog?.invoke("efi-virtio.rom: ${paths.qemuVirtioRom.length()} bytes\n")
+        onLog?.invoke("keymap en-us: ${paths.qemuEnUsKeymap.length()} bytes\n")
+    }
+
+    private fun ensureVirtioRom(onLog: ((String) -> Unit)?) {
         if (!paths.qemuVirtioRom.exists() || paths.qemuVirtioRom.length() == 0L) {
             copyAsset(QEMU_VIRTIO_ROM_ASSET, paths.qemuVirtioRom)
         }
@@ -184,9 +224,29 @@ class QemuManager(
                 append("\nTermux ROM dir: ${paths.termuxQemuShareDir.list()?.joinToString() ?: "(порожньо)"}")
             }
         }
+    }
 
-        onLog?.invoke("QEMU ROM (-L): ${paths.qemuShareDir.absolutePath}\n")
-        onLog?.invoke("efi-virtio.rom: ${paths.qemuVirtioRom.length()} bytes\n")
+    private fun ensureQemuKeymaps(onLog: ((String) -> Unit)?) {
+        if (!paths.qemuEnUsKeymap.exists() || paths.qemuEnUsKeymap.length() == 0L) {
+            copyAssetDirectory(QEMU_KEYMAPS_ASSET_DIR, paths.qemuKeymapsDir)
+        }
+
+        val termuxKeymapsDir = File(paths.termuxQemuShareDir, "keymaps")
+        if ((!paths.qemuEnUsKeymap.exists() || paths.qemuEnUsKeymap.length() == 0L) &&
+            termuxKeymapsDir.isDirectory
+        ) {
+            copyDirectory(termuxKeymapsDir, paths.qemuKeymapsDir)
+            onLog?.invoke("QEMU keymaps copied from Termux: ${termuxKeymapsDir.absolutePath}\n")
+        }
+
+        require(paths.qemuEnUsKeymap.exists() && paths.qemuEnUsKeymap.length() > 0L) {
+            buildString {
+                append("QEMU keymap en-us не знайдено. ")
+                append("Очікуваний шлях: ${paths.qemuEnUsKeymap.absolutePath}. ")
+                append("Повторіть ініціалізацію або збільште ASSETS_VERSION після оновлення payload.")
+                append("\nTermux keymaps dir: ${termuxKeymapsDir.list()?.joinToString() ?: "(порожньо)"}")
+            }
+        }
     }
 
     private fun ensureUefiFirmware(onLog: (String) -> Unit) {
@@ -204,6 +264,32 @@ class QemuManager(
         context.assets.open(assetPath).use { input ->
             target.outputStream().use { output ->
                 input.copyTo(output)
+            }
+        }
+    }
+
+    private fun copyAssetDirectory(assetDir: String, targetDir: File) {
+        val entries = context.assets.list(assetDir) ?: emptyArray()
+        if (entries.isEmpty()) {
+            copyAsset(assetDir, targetDir)
+            return
+        }
+
+        targetDir.mkdirs()
+        entries.forEach { entry ->
+            copyAssetDirectory("$assetDir/$entry", File(targetDir, entry))
+        }
+    }
+
+    private fun copyDirectory(sourceDir: File, targetDir: File) {
+        sourceDir.walkTopDown().forEach { source ->
+            val relativePath = source.relativeTo(sourceDir).path
+            val target = if (relativePath.isEmpty()) targetDir else File(targetDir, relativePath)
+            if (source.isDirectory) {
+                target.mkdirs()
+            } else {
+                target.parentFile?.mkdirs()
+                source.copyTo(target, overwrite = true)
             }
         }
     }

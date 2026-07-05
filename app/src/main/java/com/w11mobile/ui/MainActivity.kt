@@ -2,6 +2,7 @@ package com.w11mobile.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.lifecycle.lifecycleScope
 import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -13,6 +14,7 @@ import com.w11mobile.core.environment.ImageSource
 import com.w11mobile.core.environment.SetupStep
 import com.w11mobile.core.environment.WindowsImageArch
 import com.w11mobile.databinding.ActivityMainBinding
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
@@ -42,6 +44,21 @@ class MainActivity : AppCompatActivity() {
 
         setupObservers()
         setupClickListeners()
+        setupQemuKeyboardInput()
+    }
+
+    private fun setupQemuKeyboardInput() {
+        QemuKeyboardInputHelper.bindEditText(
+            editText = binding.qemuKeyboardInputMain,
+            scope = lifecycleScope,
+            onMonitorError = { message ->
+                appendMonitorError(message)
+            },
+        )
+    }
+
+    private fun appendMonitorError(message: String) {
+        viewModel.appendMonitorError(message)
     }
 
     private fun setupObservers() {
@@ -68,6 +85,10 @@ class MainActivity : AppCompatActivity() {
 
             binding.btnLaunchWindows.isEnabled = state.canLaunchWindows && !state.isRunning
             binding.btnLaunchWindows.isVisible = state.environmentReady || state.step == SetupStep.COMPLETE
+
+            binding.btnOpenTouchDisplay.isVisible = state.windowsSessionActive
+            binding.btnSendAnyKey.isVisible = state.windowsSessionActive
+            binding.btnShowKeyboardMain.isVisible = state.windowsSessionActive
 
             binding.btnImportLocalImage.isEnabled = !state.isRunning && !state.localImageUri.isNullOrBlank()
             binding.btnImportLocalImage.isVisible = state.imageSource == ImageSource.LOCAL
@@ -136,12 +157,38 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnLaunchWindows.setOnClickListener {
-            viewModel.launchWindows11()
+            if (viewModel.uiState.value?.isRunning == true) return@setOnClickListener
+            lifecycleScope.launch {
+                val isoBootMode = viewModel.prepareWindowsLaunch() ?: return@launch
+                openWindowsDisplay(isoBootMode)
+                viewModel.runWindowsLaunch(isoBootMode)
+            }
+        }
+
+        binding.btnOpenTouchDisplay.setOnClickListener {
+            openWindowsDisplay(viewModel.isIsoBootModeCached())
+        }
+
+        binding.btnSendAnyKey.setOnClickListener {
+            viewModel.sendAnyKeyToQemu()
+        }
+
+        binding.btnShowKeyboardMain.setOnClickListener {
+            QemuKeyboardInputHelper.showKeyboard(this, binding.qemuKeyboardInputMain)
         }
 
         binding.btnClearLog.setOnClickListener {
             viewModel.clearLog()
         }
+    }
+
+    private fun openWindowsDisplay(showBootOverlay: Boolean) {
+        startActivity(
+            Intent(this, WindowsDisplayActivity::class.java).apply {
+                putExtra(WindowsDisplayActivity.EXTRA_SHOW_BOOT_OVERLAY, showBootOverlay)
+                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            },
+        )
     }
 
     private fun sourceToToggleId(source: ImageSource): Int =

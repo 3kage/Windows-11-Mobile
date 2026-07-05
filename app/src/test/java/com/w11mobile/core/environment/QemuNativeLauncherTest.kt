@@ -33,7 +33,8 @@ class QemuNativeLauncherTest {
         val args = QemuNativeLauncher.buildArm64IsoArguments(uefi, iso, romDir, disk)
 
         assertEquals(romDir.absolutePath, args[args.indexOf("-L") + 1])
-        assertTrue(args.contains("qemu-xhci,id=usbctrl,iothread=winio"))
+        assertTrue(args.contains("qemu-xhci,id=usbctrl"))
+        assertFalse(args.any { it.contains("qemu-xhci") && it.contains("iothread") })
         assertTrue(
             args.contains(
                 "file=${iso.absolutePath},if=none,id=winiso,format=raw," +

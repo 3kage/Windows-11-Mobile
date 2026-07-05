@@ -55,7 +55,7 @@ object QemuNativeLauncher {
             add("-object")
             add("iothread,id=winio")
             add("-device")
-            add("qemu-xhci,id=usbctrl,iothread=winio")
+            add("qemu-xhci,id=usbctrl")
             add("-drive")
             add(isoDrive)
             // USB CD-ROM boots UDF Win11 ARM64 ISO more reliably than virtio-blk cdrom on phones.

@@ -1,4 +1,5 @@
 import java.net.URI
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -21,8 +22,8 @@ android {
         applicationId = "com.w11mobile.windows11"
         minSdk = 24
         targetSdk = 28
-        versionCode = 28
-        versionName = "1.6.6"
+        versionCode = 48
+        versionName = "1.8.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -78,6 +79,11 @@ android {
             useLegacyPackaging = true
         }
     }
+
+    lint {
+        // Sideload builds keep targetSdk 28 for compatibility; Play lint would block release APK export.
+        disable += "ExpiredTargetSdkVersion"
+    }
 }
 
 dependencies {
@@ -115,6 +121,7 @@ val qemuNativeLibOutput = layout.projectDirectory.file("src/main/jniLibs/arm64-v
 val qemuImgNativeLibOutput = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libqemu_img.so")
 val uefiFirmwareAssetOutput = layout.projectDirectory.file("src/main/assets/firmware/QEMU_EFI.fd")
 val qemuVirtioRomAssetOutput = layout.projectDirectory.file("src/main/assets/qemu/efi-virtio.rom")
+val qemuKeymapsAssetDir = layout.projectDirectory.dir("src/main/assets/qemu/keymaps")
 
 tasks.register("prepareProotNativeLibs") {
     val packagesUrl =
@@ -271,6 +278,63 @@ tasks.register("prepareQemuRoms") {
     }
 }
 
+tasks.register("prepareQemuKeymaps") {
+    val packagesUrl =
+        "https://packages.termux.dev/apt/termux-main/dists/stable/main/binary-aarch64/Packages"
+    outputs.dir(qemuKeymapsAssetDir)
+
+    onlyIf {
+        val keymapsDir = qemuKeymapsAssetDir.asFile
+        !File(keymapsDir, "en-us").exists() || File(keymapsDir, "en-us").length() == 0L
+    }
+
+    doLast {
+        val workDir = temporaryDir.resolve("termux-qemu-keymaps").apply { mkdirs() }
+        val packagesFile = workDir.resolve("Packages")
+        URI(packagesUrl).toURL().openStream().use { input ->
+            packagesFile.outputStream().use { output -> input.copyTo(output) }
+        }
+
+        val debPath = packagesFile.readText().split("\n\n")
+            .first { it.startsWith("Package: qemu-common\n") }
+            .lines()
+            .first { it.startsWith("Filename: ") }
+            .removePrefix("Filename: ")
+            .trim()
+        val debUrl = "https://packages.termux.dev/apt/termux-main/$debPath"
+        val debFile = workDir.resolve("qemu-common.deb")
+        URI(debUrl).toURL().openStream().use { input ->
+            debFile.outputStream().use { output -> input.copyTo(output) }
+        }
+
+        val extractDir = workDir.resolve("extract").apply { mkdirs() }
+        providers.exec {
+            workingDir = workDir
+            commandLine("bash", "-lc", """
+                set -euo pipefail
+                cd '${extractDir.absolutePath}'
+                ar x '${debFile.absolutePath}' data.tar.xz
+                tar -xJf data.tar.xz \
+                  ./data/data/com.termux/files/usr/share/qemu/keymaps
+            """.trimIndent())
+        }.result.get()
+
+        val sourceKeymapsDir =
+            extractDir.resolve("data/data/com.termux/files/usr/share/qemu/keymaps")
+        val targetKeymapsDir = qemuKeymapsAssetDir.asFile.apply { mkdirs() }
+        sourceKeymapsDir.walkTopDown().forEach { source ->
+            val relativePath = source.relativeTo(sourceKeymapsDir).path
+            val target = if (relativePath.isEmpty()) targetKeymapsDir else File(targetKeymapsDir, relativePath)
+            if (source.isDirectory) {
+                target.mkdirs()
+            } else {
+                target.parentFile?.mkdirs()
+                source.copyTo(target, overwrite = true)
+            }
+        }
+    }
+}
+
 tasks.register("prepareUefiFirmware") {
     val debUrl =
         "http://ftp.debian.org/debian/pool/main/e/edk2/qemu-efi-aarch64_2022.11-6+deb12u2_all.deb"
@@ -338,6 +402,85 @@ tasks.named("preBuild") {
         "prepareProotNativeLibs",
         "prepareQemuNativeLibs",
         "prepareQemuRoms",
+        "prepareQemuKeymaps",
         "prepareUefiFirmware",
     )
+}
+
+val apkExportDir = rootProject.layout.buildDirectory.dir("dist")
+
+fun registerApkExportTask(
+    taskName: String,
+    assembleTaskName: String,
+    buildType: String,
+    sourceApkPath: String,
+) {
+    tasks.register(taskName, Copy::class.java) {
+        group = "build"
+        description = "Copy $buildType APK to build/dist/ with a versioned filename"
+        dependsOn(assembleTaskName)
+        from(layout.buildDirectory.file(sourceApkPath))
+        into(apkExportDir)
+        rename { "windows11-mobile-${android.defaultConfig.versionName}-$buildType.apk" }
+        doLast {
+            val exported = apkExportDir.get().file(
+                "windows11-mobile-${android.defaultConfig.versionName}-$buildType.apk",
+            ).asFile
+            logger.lifecycle("Exported APK: ${exported.absolutePath}")
+        }
+    }
+}
+
+registerApkExportTask(
+    taskName = "exportDebugApk",
+    assembleTaskName = "assembleDebug",
+    buildType = "debug",
+    sourceApkPath = "outputs/apk/debug/app-debug.apk",
+)
+
+registerApkExportTask(
+    taskName = "exportReleaseApk",
+    assembleTaskName = "assembleRelease",
+    buildType = "release",
+    sourceApkPath = "outputs/apk/release/app-release.apk",
+)
+
+val buildToolsVersion = "34.0.0"
+
+fun registerVerifyApkTask(taskName: String, buildType: String) {
+    tasks.register(taskName) {
+        group = "verification"
+        description = "Verify exported $buildType APK signature with apksigner"
+        val apkFile = apkExportDir.map {
+            it.file("windows11-mobile-${android.defaultConfig.versionName}-$buildType.apk")
+        }
+        inputs.file(apkFile)
+        dependsOn("export${buildType.replaceFirstChar { it.uppercase() }}Apk")
+        doLast {
+            val apk = apkFile.get().asFile
+            check(apk.isFile && apk.length() > 1_000_000L) {
+                "Exported APK missing or too small (${apk.absolutePath}, ${apk.length()} bytes). " +
+                    "Do not install zip archives — extract the .apk file first."
+            }
+            val apksigner = File(android.sdkDirectory, "build-tools/$buildToolsVersion/apksigner")
+            exec {
+                commandLine(apksigner.absolutePath, "verify", "--verbose", apk.absolutePath)
+            }
+            logger.lifecycle("Verified APK: ${apk.absolutePath} (${apk.length()} bytes, SHA-256 below)")
+            logger.lifecycle(
+                MessageDigest.getInstance("SHA-256")
+                    .digest(apk.readBytes())
+                    .joinToString("") { byte -> "%02x".format(byte) },
+            )
+        }
+    }
+}
+
+registerVerifyApkTask(taskName = "verifyReleaseApk", buildType = "release")
+registerVerifyApkTask(taskName = "verifyDebugApk", buildType = "debug")
+
+tasks.register("buildApk") {
+    group = "build"
+    description = "Build release APK, export to build/dist/, and verify signature"
+    dependsOn("verifyReleaseApk")
 }

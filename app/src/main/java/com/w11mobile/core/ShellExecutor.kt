@@ -1,5 +1,6 @@
 package com.w11mobile.core
 
+import com.w11mobile.core.environment.QemuProcessSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
@@ -170,6 +171,7 @@ class ShellExecutor(
         val processBuilder = ProcessBuilder(args)
         configureProcess(processBuilder, extraEnvironment)
         val process = processBuilder.start()
+        QemuProcessSession.attach(process)
         val stdout = StringBuilder()
         val stderr = StringBuilder()
 
@@ -191,6 +193,7 @@ class ShellExecutor(
         stderrThread.join()
 
         val exitCode = process.waitFor()
+        QemuProcessSession.complete(exitCode)
         return Result(
             exitCode = exitCode,
             stdout = stdout.toString(),

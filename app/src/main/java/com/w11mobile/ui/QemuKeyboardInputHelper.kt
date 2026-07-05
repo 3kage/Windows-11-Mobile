@@ -2,6 +2,8 @@ package com.w11mobile.ui
 
 import android.app.Activity
 import android.view.KeyEvent
+import android.view.View
+import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
@@ -19,6 +21,7 @@ object QemuKeyboardInputHelper {
         scope: CoroutineScope,
         onMonitorError: ((String) -> Unit)? = null,
     ) {
+        prepareCaptureField(editText)
         var forwarding = false
 
         editText.doAfterTextChanged { editable ->
@@ -61,15 +64,40 @@ object QemuKeyboardInputHelper {
         }
     }
 
+    fun prepareCaptureField(editText: EditText) {
+        editText.apply {
+            isFocusable = true
+            isFocusableInTouchMode = true
+            isEnabled = true
+            visibility = View.VISIBLE
+            isCursorVisible = false
+        }
+    }
+
     fun showKeyboard(activity: Activity, editText: EditText) {
+        prepareCaptureField(editText)
+        activity.currentFocus?.clearFocus()
+        activity.window.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE or
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN,
+        )
         editText.requestFocus()
-        val imm = activity.getSystemService(InputMethodManager::class.java)
-        imm.showSoftInput(editText, InputMethodManager.SHOW_IMPLICIT)
+        editText.post {
+            editText.requestFocus()
+            val imm = activity.getSystemService(InputMethodManager::class.java) ?: return@post
+            if (!imm.showSoftInput(editText, InputMethodManager.SHOW_IMPLICIT)) {
+                if (!imm.showSoftInput(editText, InputMethodManager.SHOW_FORCED)) {
+                    @Suppress("DEPRECATION")
+                    imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, InputMethodManager.HIDE_IMPLICIT_ONLY)
+                }
+            }
+        }
     }
 
     fun hideKeyboard(activity: Activity, editText: EditText) {
-        val imm = activity.getSystemService(InputMethodManager::class.java)
+        val imm = activity.getSystemService(InputMethodManager::class.java) ?: return
         imm.hideSoftInputFromWindow(editText.windowToken, 0)
+        editText.clearFocus()
     }
 
     fun sendSpace(scope: CoroutineScope, onMonitorError: ((String) -> Unit)? = null) {

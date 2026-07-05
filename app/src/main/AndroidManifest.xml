@@ -32,7 +32,8 @@
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:screenOrientation="sensorLandscape"
-            android:theme="@style/Theme.Windows11Mobile" />
+            android:theme="@style/Theme.Windows11Mobile"
+            android:windowSoftInputMode="stateVisible|adjustPan" />
         <service
             android:name=".service.QemuService"
             android:exported="false"

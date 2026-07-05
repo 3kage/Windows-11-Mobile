@@ -48,6 +48,8 @@ class WindowsDisplayActivity : AppCompatActivity() {
         binding.vncFrameView.onPointerEvent = { frameX, frameY, pressed ->
             vncClient?.sendPointer(frameX, frameY, pressed)
         }
+        binding.vncFrameView.isFocusable = false
+        binding.vncFrameView.isFocusableInTouchMode = false
 
         setupInputControls()
 

@@ -4,7 +4,9 @@ Android-додаток для запуску Windows 11 у user-space (PRoot + Q
 
 ## Останній реліз
 
-**v1.7.9:** https://github.com/3kage/Windows-11-Mobile/releases/latest
+**v1.8.4:** https://github.com/3kage/Windows-11-Mobile/releases/latest
+
+Пряме завантаження APK: https://github.com/3kage/Windows-11-Mobile/releases/download/v1.8.4/windows11-mobile-1.8.4-release.apk
 
 Завантажуйте файл **`.apk`** з розділу **Assets** на сторінці релізу — це прямий APK, без zip-архіву.
 

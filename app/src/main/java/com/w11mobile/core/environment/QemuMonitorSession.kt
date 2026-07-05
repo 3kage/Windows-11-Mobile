@@ -27,6 +27,20 @@ class QemuMonitorSession private constructor(
             false
         }
 
+    private fun drainMonitorResponse() {
+        Thread.sleep(BANNER_DRAIN_MS)
+        repeat(8) {
+            try {
+                if (!reader.ready()) {
+                    return
+                }
+                reader.readLine()
+            } catch (_: Exception) {
+                return
+            }
+        }
+    }
+
     override fun close() {
         try {
             socket.close()
@@ -62,10 +76,6 @@ class QemuMonitorSession private constructor(
                 }
                 reader.readLine()
             }
-        }
-
-        private fun drainMonitorResponse() {
-            Thread.sleep(BANNER_DRAIN_MS)
         }
 
         private const val CONNECT_TIMEOUT_MS = 2_000

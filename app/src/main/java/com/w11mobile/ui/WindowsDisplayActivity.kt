@@ -138,7 +138,7 @@ class WindowsDisplayActivity : AppCompatActivity() {
 
                 val probe = withContext(Dispatchers.IO) { VncPortProbe.probe() }
                 if (!probe.rfbReady) {
-                    if (attempt == 1 || attempt % 5 == 0) {
+                    if (attempt >= 3 && attempt % 5 == 0) {
                         val detail = probe.error?.message ?: "VNC сервер ще не готовий"
                         QemuRuntimeEvents.publishStatus(
                             "VNC $detail (спроба $attempt/$MAX_CONNECT_ATTEMPTS). " +
@@ -198,7 +198,7 @@ class WindowsDisplayActivity : AppCompatActivity() {
                         port = probe.port,
                         error = error,
                     )
-                    if (attempt == 1 || attempt % 5 == 0) {
+                    if (attempt >= 3 && attempt % 5 == 0) {
                         QemuRuntimeEvents.publishStatus(
                             "VNC RFB помилка на ${VncEndpoint.HOST}:${VncEndpoint.TCP_PORT} (спроба $attempt): " +
                                 "${error.javaClass.simpleName}: ${error.message}",

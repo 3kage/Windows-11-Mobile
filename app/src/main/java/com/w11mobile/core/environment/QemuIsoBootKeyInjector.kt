@@ -10,6 +10,9 @@ class QemuIsoBootKeyInjector {
     @Volatile
     private var isoBootFailed = false
 
+    @Volatile
+    private var promptSpamStarted = false
+
     fun onOutputLine(line: String) {
         if (looksLikeIsoBootFailure(line)) {
             isoBootFailed = true
@@ -18,14 +21,30 @@ class QemuIsoBootKeyInjector {
             )
             return
         }
-        if (keySent || isoBootFailed || !looksLikePressAnyKeyPrompt(line)) {
+        if (isoBootFailed || !looksLikePressAnyKeyPrompt(line)) {
             return
         }
-        if (QemuMonitorClient.sendKeyWithRetries(maxAttempts = 5, retryDelayMs = 200L)) {
-            keySent = true
-            QemuRuntimeEvents.publishStatus(
-                "«Будь-яка клавіша» надіслано (виявлено підказку в serial-логу)",
-            )
+        if (promptSpamStarted) {
+            return
+        }
+        promptSpamStarted = true
+        Thread(
+            {
+                QemuRuntimeEvents.publishStatus(
+                    "Press any key — sendkey spc протягом ${PROMPT_SPAM_DURATION_MS / 1000} с…",
+                )
+                val sent = QemuMonitorSpaceSpam.spamSpace(PROMPT_SPAM_DURATION_MS, PROMPT_SPAM_INTERVAL_MS) { ms ->
+                    Thread.sleep(ms)
+                }
+                keySent = sent > 0
+                QemuRuntimeEvents.publishStatus(
+                    "«Будь-яка клавіша» надіслано ($sent×) — підказка в serial-логу",
+                )
+            },
+            "iso-press-any-key",
+        ).apply {
+            isDaemon = true
+            start()
         }
     }
 
@@ -60,4 +79,9 @@ class QemuIsoBootKeyInjector {
             ),
             "",
         ).replace(Regex("\\p{C}"), " ")
+
+    private companion object {
+        const val PROMPT_SPAM_DURATION_MS = 15_000L
+        const val PROMPT_SPAM_INTERVAL_MS = 250L
+    }
 }

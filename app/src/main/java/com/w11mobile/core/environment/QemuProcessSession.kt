@@ -21,6 +21,7 @@ object QemuProcessSession {
             lastExitCode = null
             launchStarted = true
         }
+        QemuMonitorClient.resetSession()
     }
 
     fun attach(process: Process) {

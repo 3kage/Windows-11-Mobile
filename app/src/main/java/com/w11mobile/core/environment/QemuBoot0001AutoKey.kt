@@ -26,6 +26,14 @@ object QemuBoot0001AutoKey {
         }
         scope.launch(Dispatchers.IO) {
             QemuRuntimeEvents.publishStatus(
+                "Boot0001 — очікування QEMU monitor ${QemuNativeLauncher.MONITOR_PORT}…",
+            )
+            var waitedMs = 0L
+            while (waitedMs < MONITOR_WAIT_MS && !QemuMonitorClient.isMonitorReachable()) {
+                delay(MONITOR_POLL_MS)
+                waitedMs += MONITOR_POLL_MS
+            }
+            QemuRuntimeEvents.publishStatus(
                 "Boot0001 — sendkey spc кожні ${SPAM_INTERVAL_MS}ms протягом ${SPAM_DURATION_MS / 1000} с…",
             )
             val deadlineMs = System.currentTimeMillis() + SPAM_DURATION_MS
@@ -43,6 +51,8 @@ object QemuBoot0001AutoKey {
         }
     }
 
+    private const val MONITOR_WAIT_MS = 10_000L
+    private const val MONITOR_POLL_MS = 200L
     private const val SPAM_DURATION_MS = 5_000L
     private const val SPAM_INTERVAL_MS = 400L
 

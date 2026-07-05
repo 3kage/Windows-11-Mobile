@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
 import androidx.core.content.ContextCompat
+import com.w11mobile.core.environment.QemuMonitorClient
+import com.w11mobile.core.environment.QemuProcessSession
 
 object QemuServiceController {
 
@@ -25,8 +27,14 @@ object QemuServiceController {
     fun getService(): QemuService? = boundService
 
     fun isQemuRunning(): Boolean {
-        val service = boundService
-        return service?.isQemuAlive() == true || service?.isLaunchInProgress() == true
+        if (QemuProcessSession.isAlive()) {
+            return true
+        }
+        if (boundService?.isLaunchInProgress() == true) {
+            return true
+        }
+        return QemuProcessSession.isLaunchStarted() &&
+            QemuProcessSession.resolvedExitCodeOrNull() == null
     }
 
     fun startLaunch(context: Context, isoBootMode: Boolean) {
@@ -56,6 +64,8 @@ object QemuServiceController {
 
     fun stopLaunch(context: Context) {
         val appContext = context.applicationContext
+        QemuProcessSession.destroyActiveProcess()
+        QemuMonitorClient.closeSharedSession()
         appContext.startService(
             Intent(appContext, QemuService::class.java).apply {
                 action = QemuService.ACTION_STOP_QEMU

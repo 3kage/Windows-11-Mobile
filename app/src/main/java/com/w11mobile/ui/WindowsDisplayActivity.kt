@@ -7,9 +7,9 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
+import com.w11mobile.databinding.ActivityWindowsDisplayBinding
 import com.w11mobile.core.environment.QemuProcessSession
 import com.w11mobile.core.environment.QemuRuntimeEvents
-import com.w11mobile.databinding.ActivityWindowsDisplayBinding
 import com.w11mobile.service.QemuServiceController
 import com.w11mobile.vnc.MinimalVncClient
 import com.w11mobile.vnc.VncConnectionDiagnostics
@@ -118,6 +118,11 @@ class WindowsDisplayActivity : AppCompatActivity() {
 
         binding.btnCloseDisplay.setOnClickListener {
             QemuKeyboardInputHelper.hideKeyboard(this, binding.qemuKeyboardInput)
+            finish()
+        }
+
+        binding.btnStopWindowsDisplay.setOnClickListener {
+            QemuServiceController.stopLaunch(this)
             finish()
         }
 

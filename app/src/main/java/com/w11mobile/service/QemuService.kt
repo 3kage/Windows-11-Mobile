@@ -16,10 +16,12 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.w11mobile.R
 import com.w11mobile.core.environment.EnvironmentSetupOrchestrator
+import com.w11mobile.core.environment.QemuBoot0001AutoKey
+import com.w11mobile.core.environment.QemuEfiShellAutoKey
+import com.w11mobile.core.environment.QemuMonitorClient
 import com.w11mobile.core.environment.QemuProcessSession
 import com.w11mobile.core.environment.QemuRuntimeEvents
 import com.w11mobile.core.environment.SetupPreferences
-import com.w11mobile.core.environment.SetupStep
 import com.w11mobile.ui.MainActivity
 
 /**
@@ -29,8 +31,13 @@ class QemuService : Service() {
 
     private val binder = LocalBinder()
     private var qemuThread: Thread? = null
+
     @Volatile
     private var launchInProgress = false
+
+    @Volatile
+    private var userStopRequested = false
+
     private var wakeLock: PowerManager.WakeLock? = null
     private var orchestrator: EnvironmentSetupOrchestrator? = null
 
@@ -49,10 +56,11 @@ class QemuService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START_QEMU -> {
+                userStopRequested = false
                 val isoBootMode = intent.getBooleanExtra(EXTRA_ISO_BOOT_MODE, false)
                 startForegroundSession(isoBootMode)
             }
-            ACTION_STOP_QEMU -> stopForegroundSession()
+            ACTION_STOP_QEMU -> stopByUser()
         }
         return START_STICKY
     }
@@ -94,11 +102,27 @@ class QemuService : Service() {
         }
     }
 
+    private fun stopByUser() {
+        userStopRequested = true
+        QemuBoot0001AutoKey.reset()
+        QemuEfiShellAutoKey.reset()
+        QemuProcessSession.destroyActiveProcess()
+        QemuMonitorClient.closeSharedSession()
+        qemuThread?.interrupt()
+        QemuRuntimeEvents.publishStatus("Windows / QEMU зупинено користувачем")
+        QemuRuntimeEvents.publishSessionEnded(QemuProcessSession.FORCED_STOP_EXIT_CODE)
+        launchInProgress = false
+        stopForegroundSession()
+    }
+
     private fun runQemuSession(@Suppress("UNUSED_PARAMETER") isoBootMode: Boolean) {
         val orchestrator = obtainOrchestrator()
         try {
             val result = kotlinx.coroutines.runBlocking {
                 orchestrator.launchWindows()
+            }
+            if (userStopRequested) {
+                return
             }
             if (result.exitCode != 0) {
                 QemuRuntimeEvents.publishFatal(
@@ -107,11 +131,15 @@ class QemuService : Service() {
             }
             QemuRuntimeEvents.publishSessionEnded(result.exitCode)
         } catch (error: Exception) {
-            QemuRuntimeEvents.publishFatal(error.message ?: "Помилка запуску QEMU")
-            QemuRuntimeEvents.publishSessionEnded(-1)
+            if (!userStopRequested) {
+                QemuRuntimeEvents.publishFatal(error.message ?: "Помилка запуску QEMU")
+                QemuRuntimeEvents.publishSessionEnded(QemuProcessSession.FORCED_STOP_EXIT_CODE)
+            }
         } finally {
             launchInProgress = false
-            stopForegroundSession()
+            if (!userStopRequested) {
+                stopForegroundSession()
+            }
         }
     }
 
@@ -187,11 +215,24 @@ class QemuService : Service() {
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val stopIntent = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, QemuService::class.java).apply {
+                action = ACTION_STOP_QEMU
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(getString(R.string.qemu_service_notification))
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentIntent(openIntent)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                getString(R.string.stop_windows),
+                stopIntent,
+            )
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)

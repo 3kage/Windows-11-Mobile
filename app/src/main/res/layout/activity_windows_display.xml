@@ -161,6 +161,18 @@
             tools:ignore="LabelFor" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnStopWindowsDisplay"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:minHeight="48dp"
+            android:text="@string/stop_windows"
+            android:textColor="@android:color/holo_red_light"
+            app:cornerRadius="12dp"
+            app:strokeColor="@android:color/holo_red_light" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnCloseDisplay"
             style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"

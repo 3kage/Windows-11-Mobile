@@ -47,6 +47,22 @@
         tools:visibility="visible" />
 
     <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnStopWindows"
+        style="@style/Widget.Material3.Button.OutlinedButton"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:layout_marginTop="8dp"
+        android:text="@string/stop_windows"
+        android:textColor="@android:color/holo_red_dark"
+        android:visibility="gone"
+        app:cornerRadius="12dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnOpenTouchDisplay"
+        app:strokeColor="@android:color/holo_red_dark"
+        tools:visibility="visible" />
+
+    <com.google.android.material.button.MaterialButton
         android:id="@+id/btnSendAnyKey"
         style="@style/Widget.Material3.Button.OutlinedButton"
         android:layout_width="0dp"
@@ -59,7 +75,7 @@
         app:layout_constraintEnd_toStartOf="@id/btnShowKeyboardMain"
         app:layout_constraintHorizontal_chainStyle="packed"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btnOpenTouchDisplay"
+        app:layout_constraintTop_toBottomOf="@id/btnStopWindows"
         app:layout_constraintWidth_percent="0.48"
         tools:visibility="visible" />
 
@@ -75,7 +91,7 @@
         app:cornerRadius="12dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toEndOf="@id/btnSendAnyKey"
-        app:layout_constraintTop_toBottomOf="@id/btnOpenTouchDisplay"
+        app:layout_constraintTop_toBottomOf="@id/btnStopWindows"
         app:layout_constraintWidth_percent="0.48"
         tools:visibility="visible" />
 

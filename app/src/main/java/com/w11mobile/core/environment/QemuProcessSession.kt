@@ -40,6 +40,18 @@ object QemuProcessSession {
         QemuMonitorClient.closeSharedSession()
     }
 
+    fun destroyActiveProcess() {
+        synchronized(this) {
+            val process = activeProcess
+            if (process != null && process.isAlive) {
+                process.destroyForcibly()
+            }
+            activeProcess = null
+            lastExitCode = FORCED_STOP_EXIT_CODE
+        }
+        QemuMonitorClient.closeSharedSession()
+    }
+
     fun reset() {
         synchronized(this) {
             activeProcess = null
@@ -80,4 +92,6 @@ object QemuProcessSession {
             null
         }
     }
+
+    const val FORCED_STOP_EXIT_CODE = -1
 }

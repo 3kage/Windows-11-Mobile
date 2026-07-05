@@ -10,6 +10,7 @@ import com.w11mobile.core.environment.QemuBoot0001AutoKey
 import com.w11mobile.core.environment.QemuEfiShellAutoKey
 import com.w11mobile.core.environment.EnvironmentSetupOrchestrator
 import com.w11mobile.core.environment.ImageSource
+import com.w11mobile.core.environment.QemuProcessSession
 import com.w11mobile.core.environment.QemuRuntimeEvents
 import com.w11mobile.core.environment.SetupPreferences
 import com.w11mobile.core.environment.SetupStep
@@ -59,10 +60,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         QemuRuntimeEvents.onSessionEnded = { exitCode ->
             viewModelScope.launch {
-                if (exitCode != 0) {
-                    appendLog("\n>>> QEMU завершився з кодом $exitCode\n")
-                } else {
-                    appendLog("\n>>> Сесію Windows завершено.\n")
+                when (exitCode) {
+                    QemuProcessSession.FORCED_STOP_EXIT_CODE -> Unit
+                    0 -> appendLog("\n>>> Сесію Windows завершено.\n")
+                    else -> appendLog("\n>>> QEMU завершився з кодом $exitCode\n")
                 }
                 val flags = withContext(Dispatchers.IO) { readEnvironmentFlags() }
                 updateState {
@@ -235,6 +236,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         appendLog(">>> QEMU запускається у Foreground Service (стійкий фоновий режим)…\n")
         QemuServiceController.startLaunch(getApplication(), isoBootMode)
+    }
+
+    fun stopWindowsSession() {
+        appendLog("\n>>> Зупинка Windows / QEMU…\n")
+        QemuServiceController.stopLaunch(getApplication())
+        updateState {
+            copy(
+                windowsSessionActive = false,
+                isRunning = false,
+            )
+        }
     }
 
     fun sendAnyKeyToQemu() {

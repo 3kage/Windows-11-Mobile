@@ -36,4 +36,5 @@
     <string name="qemu_service_channel_name">Windows 11 VM</string>
     <string name="qemu_service_channel_description">Тримає QEMU активним у фоні під час роботи Windows</string>
     <string name="qemu_service_notification">Windows 11 працює у фоні…</string>
+    <string name="stop_windows">Зупинити Windows</string>
 </resources>

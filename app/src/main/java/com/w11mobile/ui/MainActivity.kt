@@ -102,6 +102,7 @@ class MainActivity : AppCompatActivity() {
             binding.btnLaunchWindows.isVisible = state.environmentReady || state.step == SetupStep.COMPLETE
 
             binding.btnOpenTouchDisplay.isVisible = state.windowsSessionActive
+            binding.btnStopWindows.isVisible = state.windowsSessionActive
             binding.btnSendAnyKey.isVisible = state.windowsSessionActive
             binding.btnShowKeyboardMain.isVisible = state.windowsSessionActive
 
@@ -182,6 +183,10 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnOpenTouchDisplay.setOnClickListener {
             openWindowsDisplay(viewModel.isIsoBootModeCached())
+        }
+
+        binding.btnStopWindows.setOnClickListener {
+            viewModel.stopWindowsSession()
         }
 
         binding.btnSendAnyKey.setOnClickListener {

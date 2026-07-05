@@ -9,6 +9,7 @@ import java.io.DataOutputStream
 import java.io.EOFException
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.Executors
 import javax.crypto.Cipher
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.DESKeySpec
@@ -29,6 +30,10 @@ class MinimalVncClient(
 
     @Volatile
     private var running = false
+
+    private val ioExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "vnc-client-io").apply { isDaemon = true }
+    }
 
     private var socket: Socket? = null
     private var input: DataInputStream? = null
@@ -90,6 +95,18 @@ class MinimalVncClient(
     }
 
     fun sendPointer(x: Int, y: Int, pressed: Boolean) {
+        ioExecutor.execute {
+            sendPointerBlocking(x, y, pressed)
+        }
+    }
+
+    fun sendKey(keySym: Int) {
+        ioExecutor.execute {
+            sendKeyBlocking(keySym)
+        }
+    }
+
+    private fun sendPointerBlocking(x: Int, y: Int, pressed: Boolean) {
         val out = output ?: return
         synchronized(out) {
             out.writeByte(CLIENT_POINTER_EVENT)
@@ -100,7 +117,7 @@ class MinimalVncClient(
         }
     }
 
-    fun sendKey(keySym: Int) {
+    private fun sendKeyBlocking(keySym: Int) {
         val out = output ?: return
         synchronized(out) {
             out.writeByte(CLIENT_KEY_EVENT)
@@ -121,6 +138,7 @@ class MinimalVncClient(
 
     fun close() {
         running = false
+        ioExecutor.shutdownNow()
         try {
             socket?.close()
         } catch (_: Exception) {

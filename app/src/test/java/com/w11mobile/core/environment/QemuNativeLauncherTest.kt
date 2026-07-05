@@ -37,7 +37,7 @@ class QemuNativeLauncherTest {
         assertFalse(args.any { it.contains("qemu-xhci") && it.contains("iothread") })
         assertTrue(
             args.contains(
-                "file=${iso.absolutePath},if=none,id=winiso,format=raw," +
+                "file=${iso.absolutePath},if=none,id=winiso,media=cdrom,format=raw," +
                     "readonly=on,cache=unsafe,aio=threads",
             ),
         )

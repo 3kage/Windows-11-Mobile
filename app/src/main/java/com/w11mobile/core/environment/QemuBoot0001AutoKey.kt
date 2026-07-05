@@ -7,8 +7,8 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * When UEFI logs `starting Boot0001`, repeatedly send `sendkey spc` via QEMU monitor
- * to hit "Press any key to boot from CD..." during slow UDF ISO loads on phone storage.
+ * When UEFI logs `starting Boot0001`, spam `sendkey spc` via QEMU monitor for 5 s
+ * (every 400 ms) to hit "Press any key to boot from CD..." regardless of timing.
  */
 object QemuBoot0001AutoKey {
     private val scheduled = AtomicBoolean(false)
@@ -26,26 +26,25 @@ object QemuBoot0001AutoKey {
         }
         scope.launch(Dispatchers.IO) {
             QemuRuntimeEvents.publishStatus(
-                "Boot0001 стартує — автоматичні sendkey spc протягом 60 с…",
+                "Boot0001 — sendkey spc кожні ${SPAM_INTERVAL_MS}ms протягом ${SPAM_DURATION_MS / 1000} с…",
             )
-            var lastDelay = 0L
-            for (targetDelay in SEND_AT_MS) {
-                delay(targetDelay - lastDelay)
-                lastDelay = targetDelay
+            val deadlineMs = System.currentTimeMillis() + SPAM_DURATION_MS
+            var sent = 0
+            while (System.currentTimeMillis() < deadlineMs) {
                 if (QemuMonitorClient.sendRawMonitorCommand("sendkey spc")) {
-                    QemuRuntimeEvents.publishStatus(
-                        "sendkey spc (+${targetDelay}ms після Boot0001) → " +
-                            "${QemuNativeLauncher.MONITOR_HOST}:${QemuNativeLauncher.MONITOR_PORT}",
-                    )
+                    sent += 1
                 }
+                delay(SPAM_INTERVAL_MS)
             }
+            QemuRuntimeEvents.publishStatus(
+                "Boot0001 sendkey spc завершено ($sent×) → " +
+                    "${QemuNativeLauncher.MONITOR_HOST}:${QemuNativeLauncher.MONITOR_PORT}",
+            )
         }
     }
 
-    /** Delays from Boot0001 start (ms). First send at 1 s as requested. */
-    private val SEND_AT_MS = longArrayOf(
-        1_000L, 3_000L, 6_000L, 10_000L, 15_000L, 22_000L, 30_000L, 40_000L, 55_000L,
-    )
+    private const val SPAM_DURATION_MS = 5_000L
+    private const val SPAM_INTERVAL_MS = 400L
 
     internal fun isStartingBoot0001Line(line: String): Boolean =
         line.contains("starting Boot0001", ignoreCase = true)

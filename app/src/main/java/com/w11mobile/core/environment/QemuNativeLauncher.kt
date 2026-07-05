@@ -37,7 +37,7 @@ object QemuNativeLauncher {
     ): List<String> {
         val virtioRom = File(qemuShareDir, VIRTIO_ROM).absolutePath
         val isoDrive =
-            "file=${isoFile.absolutePath},if=none,id=winiso,format=raw," +
+            "file=${isoFile.absolutePath},if=none,id=winiso,media=cdrom,format=raw," +
                 "readonly=on,cache=unsafe,aio=threads"
         return buildList {
             add("-L")
@@ -58,7 +58,6 @@ object QemuNativeLauncher {
             add("qemu-xhci,id=usbctrl")
             add("-drive")
             add(isoDrive)
-            // USB CD-ROM boots UDF Win11 ARM64 ISO more reliably than virtio-blk cdrom on phones.
             add("-device")
             add("usb-storage,bus=usbctrl.0,drive=winiso,bootindex=1,removable=on")
             if (installDisk != null && installDisk.exists()) {

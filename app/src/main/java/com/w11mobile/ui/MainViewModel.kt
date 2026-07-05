@@ -7,6 +7,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.w11mobile.core.environment.QemuBoot0001AutoKey
+import com.w11mobile.core.environment.QemuEfiShellAutoKey
 import com.w11mobile.core.environment.EnvironmentSetupOrchestrator
 import com.w11mobile.core.environment.ImageSource
 import com.w11mobile.core.environment.QemuRuntimeEvents
@@ -181,6 +182,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun runWindowsLaunch(isoBootMode: Boolean) {
         viewModelScope.launch {
             QemuBoot0001AutoKey.reset()
+            QemuEfiShellAutoKey.reset()
             updateState {
                 copy(
                     isRunning = true,
@@ -278,6 +280,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun appendLog(text: String) {
         updateState { copy(terminalLog = terminalLog + text) }
         QemuBoot0001AutoKey.onTerminalLine(text, viewModelScope)
+        QemuEfiShellAutoKey.onTerminalLine(text, viewModelScope)
     }
 
     private fun updateState(transform: SetupUiState.() -> SetupUiState) {

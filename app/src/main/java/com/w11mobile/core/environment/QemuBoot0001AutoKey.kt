@@ -7,8 +7,8 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * When UEFI logs `starting Boot0001`, send `sendkey spc` via QEMU monitor after 1 s
- * to hit the Windows ISO "Press any key to boot from CD..." window.
+ * When UEFI logs `starting Boot0001`, repeatedly send `sendkey spc` via QEMU monitor
+ * to hit "Press any key to boot from CD..." during slow UDF ISO loads on phone storage.
  */
 object QemuBoot0001AutoKey {
     private val scheduled = AtomicBoolean(false)
@@ -25,29 +25,27 @@ object QemuBoot0001AutoKey {
             return
         }
         scope.launch(Dispatchers.IO) {
-            delay(BOOT_DELAY_MS)
-            repeat(MAX_ATTEMPTS) { attempt ->
-                if (attempt > 0) {
-                    delay(RETRY_MS)
-                }
+            QemuRuntimeEvents.publishStatus(
+                "Boot0001 стартує — автоматичні sendkey spc протягом 60 с…",
+            )
+            var lastDelay = 0L
+            for (targetDelay in SEND_AT_MS) {
+                delay(targetDelay - lastDelay)
+                lastDelay = targetDelay
                 if (QemuMonitorClient.sendRawMonitorCommand("sendkey spc")) {
                     QemuRuntimeEvents.publishStatus(
-                        "sendkey spc після Boot0001 (+${BOOT_DELAY_MS}ms) → " +
+                        "sendkey spc (+${targetDelay}ms після Boot0001) → " +
                             "${QemuNativeLauncher.MONITOR_HOST}:${QemuNativeLauncher.MONITOR_PORT}",
                     )
-                    return@launch
                 }
             }
-            QemuRuntimeEvents.publishStatus(
-                "Не вдалося sendkey spc після Boot0001 (monitor ${QemuNativeLauncher.MONITOR_HOST}:" +
-                    "${QemuNativeLauncher.MONITOR_PORT})",
-            )
         }
     }
 
-    private const val BOOT_DELAY_MS = 1_000L
-    private const val RETRY_MS = 2_000L
-    private const val MAX_ATTEMPTS = 8
+    /** Delays from Boot0001 start (ms). First send at 1 s as requested. */
+    private val SEND_AT_MS = longArrayOf(
+        1_000L, 3_000L, 6_000L, 10_000L, 15_000L, 22_000L, 30_000L, 40_000L, 55_000L,
+    )
 
     internal fun isStartingBoot0001Line(line: String): Boolean =
         line.contains("starting Boot0001", ignoreCase = true)

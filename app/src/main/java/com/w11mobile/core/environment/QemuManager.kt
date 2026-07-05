@@ -120,6 +120,8 @@ class QemuManager(
             onLine(">>> ${isoCheck.message}\n")
             require(isoCheck.ok) { isoCheck.message }
 
+            WindowsIsoWarmup.warm(paths.windowsIso) { line -> onLine("$line\n") }
+
             val diskResult = createInstallDiskIfNeeded { line -> onLine("$line\n") }
             if (diskResult.exitCode != 0 && diskResult.command != "skip") {
                 return diskResult

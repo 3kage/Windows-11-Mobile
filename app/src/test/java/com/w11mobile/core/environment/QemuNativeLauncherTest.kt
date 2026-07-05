@@ -33,15 +33,15 @@ class QemuNativeLauncherTest {
         val args = QemuNativeLauncher.buildArm64IsoArguments(uefi, iso, romDir, disk)
 
         assertEquals(romDir.absolutePath, args[args.indexOf("-L") + 1])
-        assertTrue(args.contains("qemu-xhci,id=usbctrl"))
+        assertTrue(args.contains("qemu-xhci,id=usbctrl,iothread=winio"))
         assertTrue(
             args.contains(
-                "file=${iso.absolutePath},if=none,id=winiso,media=cdrom,format=raw," +
+                "file=${iso.absolutePath},if=none,id=winiso,format=raw," +
                     "readonly=on,cache=unsafe,aio=threads",
             ),
         )
-        assertTrue(args.contains("virtio-blk-pci,drive=winiso,bootindex=1,iothread=winio"))
-        assertFalse(args.any { it.contains("usb-storage") && it.contains("winiso") })
+        assertTrue(args.contains("usb-storage,bus=usbctrl.0,drive=winiso,bootindex=1,removable=on"))
+        assertFalse(args.any { it.contains("virtio-blk-pci,drive=winiso") })
         assertTrue(
             args.contains(
                 "file=${disk.absolutePath},if=none,format=qcow2,id=windisk,cache=unsafe,aio=threads",
@@ -99,7 +99,7 @@ class QemuNativeLauncherTest {
         val args = QemuNativeLauncher.buildArm64IsoArguments(uefi, iso, romDir)
 
         assertEquals("virt", args[args.indexOf("-machine") + 1])
-        assertTrue(args.containsAll(listOf("-cpu", "max", "-smp", "2", "-m", "4096")))
+        assertTrue(args.containsAll(listOf("-cpu", "max", "-smp", "4", "-m", "4096")))
         assertEquals(uefi.absolutePath, args[args.indexOf("-bios") + 1])
     }
 
